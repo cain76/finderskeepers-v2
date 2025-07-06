@@ -42,14 +42,14 @@ services:
   # API BACKEND
   # ========================================
   fastapi:
-    image: tiangolo/uvicorn-gunicorn-fastapi:python3.11
+    build:
+      context: ./services/diary-api
+      dockerfile: Dockerfile
     container_name: fk2_fastapi
     restart: unless-stopped
     ports:
       - "8000:80"
     environment:
-      - MODULE_NAME=main
-      - VARIABLE_NAME=app
       - PYTHONPATH=/app
       - LOG_LEVEL=info
       # Database connections
@@ -68,8 +68,6 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    volumes:
-      - ./services/diary-api:/app
     deploy:
       resources:
         reservations:

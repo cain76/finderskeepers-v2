@@ -1,0 +1,168 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/home",
+        "/media/cain/linux_storage"
+      ],
+      "env": {}
+    },
+    "ide": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jitl/mcp-server-code"
+      ],
+      "env": {}
+    },
+    "brave-search": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "BSAomC2D07-YMgcFrMPAMQOpCMCI0CP"
+      }
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "env": {}
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {}
+    },
+    "think-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "think-mcp"
+      ],
+      "env": {}
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "env": {}
+    },
+    "desktop-commander": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wonderwhy-er/desktop-commander"
+      ],
+      "env": {}
+    },
+    "mcp-server-firecrawl": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@firecrawl/mcp-server-firecrawl"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+      }
+    },
+    "puppeteer_tools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "puppeteer-mcp-server"
+      ],
+      "env": {}
+    },
+    "cloudflare-observability": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://observability.mcp.cloudflare.com/sse"
+      ],
+      "env": {}
+    },
+    "cloudflare-bindings": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://bindings.mcp.cloudflare.com/sse"
+      ],
+      "env": {}
+    },
+    "finderskeepers": {
+      "type": "stdio",
+      "command": "/media/cain/linux_storage/bitcain/finderskeepers/run_mcp.sh",
+      "args": [],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    },
+    "crawl4ai": {
+      "type": "stdio",
+      "command": "/media/cain/linux_storage/bitcain/crawl4ai-mcp-server/run_mcp.sh",
+      "args": [],
+      "env": {}
+    },
+    "n8n": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "MCP_MODE=stdio",
+        "-e", "LOG_LEVEL=error",
+        "-e", "DISABLE_CONSOLE_OUTPUT=true",
+        "-e", "N8N_API_URL=http://localhost:5678",
+        "-e", "N8N_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MjI3MzkyMC04NGVmLTRhZDUtYjlmOC1hOTU4MjBlNWUxZDMiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUxNzE3NDMwfQ.HagxY3gKIKm7imKBqolOfKW4uSObJYApFRL1XMvhsBw",
+        "ghcr.io/czlonkowski/n8n-mcp:latest"
+      ],
+      "env": {}
+    },
+    "kubernetes": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/node_modules/mcp-server-kubernetes/dist/index.js"
+      ],
+      "env": {
+        "KUBECONFIG": "/home/cain/.kube/config"
+      }
+    },
+    "postgres-finderskeepers": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
+      }
+    }
+  }
+}

@@ -1,0 +1,322 @@
+{
+  "name": "Agent Session Logger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-logger",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "8a01c88f-633e-4944-ad21-ee3dd0fbbe34",
+      "name": "Agent Session Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        260
+      ],
+      "webhookId": "45165d52-770a-440a-a4b7-2e628218c29b"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $now || $randomString(12) }}",
+              "type": "string"
+            },
+            {
+              "id": "agent_type",
+              "name": "agent_type",
+              "value": "={{ $json.body.agent_type || 'claude-code' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'local_user' }}",
+              "type": "string"
+            },
+            {
+              "id": "project",
+              "name": "project",
+              "value": "={{ $json.body.project || 'finderskeepers-v2' }}",
+              "type": "string"
+            },
+            {
+              "id": "context",
+              "name": "context",
+              "value": "={{ $json.body.context }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "10b19caa-5161-4c57-86de-ba3b0fb0bb63",
+      "name": "Transform Session Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -440,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "agent_sessions",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "context": "={{ $json.context }}",
+            "project": "={{ $json.project }}",
+            "agent_type": "={{ $json.agent_type }}",
+            "session_id": "=={{ $json.session_id }}",
+            "user_id": "={{ $json.user_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "agent_type",
+              "displayName": "agent_type",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "project",
+              "displayName": "project",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "start_time",
+              "displayName": "start_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "end_time",
+              "displayName": "end_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "context",
+              "displayName": "context",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "fa2872c2-8bca-4321-946c-c34470e75821",
+      "name": "Store in PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -240,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ZBL4JcTdn1oW3h4g",
+          "name": "FindersKeepers PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fastapi/api/diary/sessions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"session_id\": \"{{ $('Transform Session Data').item.json.session_id }}\",\n    \"agent_type\": \"{{ $('Transform Session Data').item.json.agent_type }}\",\n    \"user_id\": \"{{ $('Transform Session Data').item.json.user_id }}\",\n    \"project\": \"{{ $('Transform Session Data').item.json.project }}\",\n    \"context\": {{ JSON.stringify($('Transform Session Data').item.json.context) }} \n}",
+        "options": {}
+      },
+      "id": "3d0d3f6f-b734-489a-965a-2f6311bc82d5",
+      "name": "Notify FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Agent session logged successfully",
+              "type": "string"
+            },
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $json.session_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e6bbb122-7aeb-46a2-bdb7-d80cf50d6ac8",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -40,
+        260
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agent Session Webhook": {
+      "main": [
+        [
+          {
+            "node": "Transform Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Session Data": {
+      "main": [
+        [
+          {
+            "node": "Store in PostgreSQL",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify FastAPI": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "58f4910e-4772-4df2-8436-23e0184386ed",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ac197806a966aef7a32a37f88a86659b96901c5596e657b15fe03671fab2eec0"
+  },
+  "id": "g0GEZOlcWm3bYvE9",
+  "tags": [
+    {
+      "createdAt": "2025-07-05T15:56:56.588Z",
+      "updatedAt": "2025-07-05T15:56:56.588Z",
+      "id": "wziWqzrMJF7yBPeO",
+      "name": "Agent Automation"
+    }
+  ]
+}

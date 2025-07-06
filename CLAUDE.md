@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🎯 PROJECT ROADMAP
+**CRITICAL**: Always check `.claude/ROADMAP.md` for current project status, priorities, and next steps. This living document tracks our progress through all phases of FindersKeepers v2 development and contains critical architectural decisions.
+
 ## Project Overview
 
 FindersKeepers v2 is a personal AI agent knowledge hub built with a containerized microservices architecture. It tracks agent sessions, manages documentation, and provides intelligent knowledge retrieval across multiple AI interactions.

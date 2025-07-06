@@ -1,0 +1,69 @@
+[project]
+name = "finderskeepers-diary-api"
+version = "0.1.0"
+description = "FindersKeepers v2 FastAPI Backend - AI Agent Knowledge Hub"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Core Framework
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    
+    # Database Drivers
+    "asyncpg>=0.29.0",          # PostgreSQL async driver
+    "neo4j>=5.15.0",            # Neo4j graph database
+    "redis>=5.0.1",             # Redis caching
+    "qdrant-client>=1.7.0",     # Qdrant vector database
+    
+    # Data Processing
+    "pydantic>=2.5.0",          # Data validation
+    "pydantic-settings>=2.1.0", # Settings management
+    "python-multipart>=0.0.6",  # File upload support
+    
+    # AI & ML
+    "openai>=1.6.0",            # OpenAI API
+    "google-generativeai>=0.3.0", # Google Gemini API
+    "anthropic>=0.8.0",         # Anthropic Claude API
+    
+    # Utilities
+    "python-dotenv>=1.0.0",     # Environment variables
+    "python-jose[cryptography]>=3.3.0", # JWT tokens
+    "passlib[bcrypt]>=1.7.4",   # Password hashing
+    "httpx>=0.26.0",            # HTTP client for Ollama integration
+    "aiofiles>=23.2.0",         # Async file operations
+    
+    # Monitoring & Logging
+    "structlog>=23.2.0",        # Structured logging
+    "prometheus-client>=0.19.0", # Metrics
+]
+
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest>=7.4.0",           # Testing framework
+    "pytest-asyncio>=0.23.0",  # Async testing
+    
+    # Code Quality
+    "black>=23.12.0",          # Code formatting
+    "isort>=5.13.0",           # Import sorting
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0", 
+    "black>=23.12.0",
+    "isort>=5.13.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.isort]
+profile = "black"
+line_length = 88

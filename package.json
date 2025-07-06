@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "@ahmad.soliman/mcp-n8n-server": "^1.0.3",
+    "@modelcontextprotocol/server-brave-search": "^0.6.2",
+    "@modelcontextprotocol/server-filesystem": "^2025.7.1",
+    "@modelcontextprotocol/server-postgres": "^0.6.2",
+    "@modelcontextprotocol/server-sequential-thinking": "^2025.7.1",
+    "@upstash/context7-mcp": "^1.0.14",
+    "@wonderwhy-er/desktop-commander": "^0.2.3",
+    "mcp-server-kubernetes": "^2.5.0",
+    "puppeteer-mcp-server": "^0.7.2",
+    "think-mcp": "^0.1.5"
+  }
+}

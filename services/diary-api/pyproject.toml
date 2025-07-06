@@ -8,32 +8,34 @@ dependencies = [
     # Core Framework
     "fastapi>=0.104.1",
     "uvicorn[standard]>=0.24.0",
-    
     # Database Drivers
-    "asyncpg>=0.29.0",          # PostgreSQL async driver
-    "neo4j>=5.15.0",            # Neo4j graph database
-    "redis>=5.0.1",             # Redis caching
-    "qdrant-client>=1.7.0",     # Qdrant vector database
-    
+    "asyncpg>=0.29.0", # PostgreSQL async driver
+    "neo4j>=5.15.0", # Neo4j graph database
+    "redis>=5.0.1", # Redis caching
+    "qdrant-client>=1.7.0", # Qdrant vector database
     # Data Processing
-    "pydantic>=2.5.0",          # Data validation
+    "pydantic>=2.5.0", # Data validation
     "pydantic-settings>=2.1.0", # Settings management
-    "python-multipart>=0.0.6",  # File upload support
-    
+    "python-multipart>=0.0.6", # File upload support
     # AI & ML
-    "openai>=1.6.0",            # OpenAI API
+    "openai>=1.6.0", # OpenAI API
     "google-generativeai>=0.3.0", # Google Gemini API
-    "anthropic>=0.8.0",         # Anthropic Claude API
-    
+    "anthropic>=0.8.0", # Anthropic Claude API
     # Utilities
-    "python-dotenv>=1.0.0",     # Environment variables
+    "python-dotenv>=1.0.0", # Environment variables
     "python-jose[cryptography]>=3.3.0", # JWT tokens
-    "passlib[bcrypt]>=1.7.4",   # Password hashing
-    "httpx>=0.26.0",            # HTTP client for Ollama integration
-    "aiofiles>=23.2.0",         # Async file operations
-    
+    "passlib[bcrypt]>=1.7.4", # Password hashing
+    "httpx>=0.26.0", # HTTP client for Ollama integration
+    "aiofiles>=23.2.0", # Async file operations
+    # Document Processing
+    "python-magic>=0.4.27", # File type detection
+    "unstructured[all-docs]>=0.10.0", # Universal document parsing
+    "langchain-community>=0.0.13", # Document loaders
+    "easyocr>=1.7.0", # OCR processing
+    "openai-whisper>=20231117", # Audio transcription
+    "Pillow>=10.0.0", # Image processing
     # Monitoring & Logging
-    "structlog>=23.2.0",        # Structured logging
+    "structlog>=23.2.0", # Structured logging
     "prometheus-client>=0.19.0", # Metrics
 ]
 
@@ -51,6 +53,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [tool.uv]
 dev-dependencies = [

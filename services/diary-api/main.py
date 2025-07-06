@@ -15,6 +15,9 @@ import logging
 import httpx
 import asyncio
 
+# Import ingestion module
+from app.api.v1.ingestion import ingestion_router
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -112,6 +115,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(ingestion_router)
+
 # ========================================
 # DATA MODELS
 # ========================================
@@ -180,7 +186,8 @@ async def root():
             "health": "/health",
             "diary": "/api/diary/*",
             "knowledge": "/api/knowledge/*",
-            "config": "/api/config/*"
+            "config": "/api/config/*",
+            "ingestion": "/api/v1/ingestion/*"
         }
     }
 

@@ -1,0 +1,1 @@
+"""FindersKeepers v2 MCP Knowledge Server source module"""

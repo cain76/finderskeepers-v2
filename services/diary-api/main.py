@@ -169,6 +169,10 @@ class ConfigChange(BaseModel):
     impact: Optional[str] = Field(None, description="Expected impact")
     project: Optional[str] = Field(None, description="Project context")
 
+class EmbeddingRequest(BaseModel):
+    """Request for text embeddings"""
+    text: str = Field(..., description="Text to generate embeddings for")
+
 # ========================================
 # HEALTH CHECK
 # ========================================
@@ -219,6 +223,39 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
+
+# ========================================
+# EMBEDDINGS API - For MCP Knowledge Server
+# ========================================
+
+@app.post("/api/embeddings", tags=["Embeddings"])
+async def generate_embeddings(request: EmbeddingRequest):
+    """Generate embeddings for text using local Ollama model"""
+    try:
+        logger.info(f"Generating embeddings for text (length: {len(request.text)})")
+        
+        # Generate embeddings using local Ollama
+        embeddings = await ollama_client.get_embeddings(request.text)
+        
+        if not embeddings:
+            raise HTTPException(
+                status_code=503, 
+                detail="Embedding generation failed - Ollama service may be unavailable"
+            )
+        
+        return {
+            "embeddings": embeddings,
+            "dimensions": len(embeddings),
+            "model": ollama_client.embedding_model,
+            "text_length": len(request.text),
+            "local_llm_used": ollama_client.use_local
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Embedding generation error: {str(e)}")
 
 # ========================================
 # DIARY API - Agent Session Tracking

@@ -113,14 +113,6 @@
       ],
       "env": {}
     },
-    "finderskeepers": {
-      "type": "stdio",
-      "command": "/media/cain/linux_storage/bitcain/finderskeepers/run_mcp.sh",
-      "args": [],
-      "env": {
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-      }
-    },
     "crawl4ai": {
       "type": "stdio",
       "command": "/media/cain/linux_storage/bitcain/crawl4ai-mcp-server/run_mcp.sh",
@@ -153,15 +145,30 @@
         "KUBECONFIG": "/home/cain/.kube/config"
       }
     },
-    "postgres-finderskeepers": {
+    "fk-db": {
       "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-postgres"
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
+      ],
+      "env": {}
+    },
+    "finderskeepers-knowledge": {
+      "type": "stdio",
+      "command": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/.venv/bin/python",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/src/knowledge_server.py"
       ],
       "env": {
-        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
+        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2",
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "fk2025neo4j",
+        "QDRANT_URL": "http://localhost:6333",
+        "REDIS_URL": "redis://localhost:6379",
+        "FASTAPI_URL": "http://localhost:8000"
       }
     }
   }

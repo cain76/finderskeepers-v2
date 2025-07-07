@@ -1,6 +1,10 @@
 # FindersKeepers v2 FastAPI Backend - Production UV Build
 # Multi-stage build for optimized production image
 
+# Docker authentication arguments
+ARG DOCKER_USERNAME
+ARG DOCKER_TOKEN
+
 FROM python:3.11-slim AS builder
 
 # Install uv - pinned version for reproducibility
@@ -38,6 +42,10 @@ COPY . .
 
 # Production stage - smaller final image
 FROM python:3.11-slim
+
+# Pass authentication args to production stage
+ARG DOCKER_USERNAME
+ARG DOCKER_TOKEN
 
 # Set production environment variables
 ENV PYTHONUNBUFFERED=1

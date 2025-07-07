@@ -200,10 +200,13 @@ class StorageService:
         points = []
         for chunk in chunks:
             if chunk.embeddings:
+                # Convert string chunk_id to integer hash for Qdrant compatibility
+                point_id = abs(hash(chunk.chunk_id)) % (2**31)  # Ensure positive 32-bit integer
                 point = PointStruct(
-                    id=chunk.chunk_id,
+                    id=point_id,
                     vector=chunk.embeddings,
                     payload={
+                        "chunk_id": chunk.chunk_id,  # Store original string ID in payload
                         "document_id": document_id,
                         "chunk_index": chunk.metadata.chunk_index,
                         "content": chunk.content[:500],  # First 500 chars for preview
@@ -373,7 +376,7 @@ class StorageService:
         results = []
         for hit in search_result:
             results.append({
-                "chunk_id": hit.id,
+                "chunk_id": hit.payload.get("chunk_id", hit.id),  # Use original chunk_id from payload
                 "score": hit.score,
                 "document_id": hit.payload.get("document_id"),
                 "content": hit.payload.get("content"),

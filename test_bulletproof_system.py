@@ -351,6 +351,8 @@ class BulletproofSystemTester:
     
     async def test_incomplete_session_detection(self):
         """Test detection of incomplete sessions"""
+        from datetime import timedelta
+        
         # Verify the detection logic works (session without end_time)
         test_session = {
             "session_id": "incomplete_test",
@@ -359,7 +361,6 @@ class BulletproofSystemTester:
         }
         
         # The detection logic looks for sessions > 1 hour old without end_time
-        from datetime import timedelta
         start_time = datetime.fromisoformat(test_session['start_time'].replace('Z', '+00:00'))
         time_elapsed = datetime.now(timezone.utc) - start_time
         

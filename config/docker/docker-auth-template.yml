@@ -1,0 +1,62 @@
+# DOCKER AUTHENTICATION TEMPLATE
+# Add this to ALL docker-compose.yml files and Dockerfiles in FindersKeepers v2
+
+# ==========================================
+# FOR DOCKER-COMPOSE.YML FILES:
+# ==========================================
+
+# Add to any service that builds custom images:
+services:
+  your-service:
+    build:
+      context: ./path/to/service
+      dockerfile: Dockerfile
+      args:
+        DOCKER_USERNAME: ${DOCKER_USERNAME}
+        DOCKER_TOKEN: ${DOCKER_TOKEN}
+    # ... rest of service config
+
+# ==========================================
+# FOR DOCKERFILE FILES:
+# ==========================================
+
+# Add at the top of EVERY Dockerfile:
+# Docker authentication arguments (MANDATORY)
+ARG DOCKER_USERNAME
+ARG DOCKER_TOKEN
+
+# For multi-stage builds, add to EACH stage that needs authentication:
+FROM some-base-image AS stage-name
+
+# Pass authentication args to this stage
+ARG DOCKER_USERNAME
+ARG DOCKER_TOKEN
+
+# ==========================================
+# REQUIRED .ENV VARIABLES:
+# ==========================================
+
+# These MUST be in .env file:
+DOCKER_USERNAME=your_docker_username
+DOCKER_TOKEN=your_docker_token_here
+
+# ==========================================
+# WHY THIS IS MANDATORY:
+# ==========================================
+
+# 1. Private registry access for custom images
+# 2. Docker Hub rate limiting bypassed with authentication  
+# 3. Production deployments require proper credentials
+# 4. BuildKit optimizations work better with authentication
+# 5. Prevents random build failures due to registry limits
+
+# ==========================================
+# TESTING AUTHENTICATION:
+# ==========================================
+
+# Test with:
+docker login -u ${DOCKER_USERNAME} -p ${DOCKER_TOKEN}
+docker-compose build --no-cache
+docker-compose up -d
+
+# Should build without "unauthorized" or "rate limit" errors

@@ -19,3 +19,4 @@ backups/
 .env.example
 .env
 .env.backup
+services/diary-api/test_env/

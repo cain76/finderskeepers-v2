@@ -145,17 +145,8 @@
         "KUBECONFIG": "/home/cain/.kube/config"
       }
     },
-    "fk-db": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-postgres",
-        "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
-      ],
-      "env": {}
-    },
-    "finderskeepers-knowledge": {
+
+    "fk-knowledge": {
       "type": "stdio",
       "command": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/.venv/bin/python",
       "args": [
@@ -168,7 +159,11 @@
         "NEO4J_PASSWORD": "fk2025neo4j",
         "QDRANT_URL": "http://localhost:6333",
         "REDIS_URL": "redis://localhost:6379",
-        "FASTAPI_URL": "http://localhost:8000"
+        "FASTAPI_URL": "http://localhost:8000",
+        "CRASH_RECOVERY_ENABLED": "true",
+        "BULLETPROOF_MODE": "true",
+        "AUTO_SESSION_LOGGING": "true",
+        "BACKUP_PERSISTENCE": "maximum"
       }
     }
   }

@@ -7,12 +7,11 @@ ARG DOCKER_TOKEN
 
 FROM python:3.11-slim AS builder
 
-# Install system dependencies for python-magic and other packages
+# Install system dependencies for python-magic and build tools
 RUN apt-get update && apt-get install -y \
     libmagic1 \
     libmagic-dev \
     gcc \
-    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv - pinned version for reproducibility

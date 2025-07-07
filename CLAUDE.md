@@ -131,6 +131,27 @@ Check for conflicts on ports 5432, 5678, 6333, 6379, 7474, 7687, 8000
 - Minimum 8GB RAM recommended
 - Adjust memory limits in `docker-compose.yml`
 
+## Docker Authentication & Monitoring
+
+### Docker Registry Login
+```bash
+# Docker credentials are in .env file (DOCKER_USERNAME, DOCKER_TOKEN)
+# Use environment variables instead of docker login due to pass store issues:
+export DOCKER_USERNAME=your_docker_username
+export DOCKER_TOKEN=your_docker_token_from_env
+```
+
+### Portainer Docker Monitoring
+```bash
+# Install Portainer for visual Docker monitoring:
+docker volume create portainer_data
+docker run -d -p 8080:8000 -p 9443:9443 --name portainer --restart=always \
+  -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data \
+  portainer/portainer-ce:latest
+
+# Access: http://localhost:9443 (HTTPS) or http://localhost:8080 (HTTP)
+```
+
 ## File Structure Notes
 
 - `services/diary-api/` - FastAPI application (Python 3.11)

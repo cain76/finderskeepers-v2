@@ -33,9 +33,9 @@ class BulletproofSessionLogger:
     
     def __init__(self):
         # Database connections with failover
-        self.postgres_url = "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2"
+        self.postgres_url = "postgresql://finderskeepers:fk2025secure@fk2_postgres:5432/finderskeepers_v2"
         self.postgres_host_url = "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
-        self.neo4j_uri = "bolt://neo4j:7687"
+        self.neo4j_uri = "bolt://fk2_neo4j:7687"
         self.neo4j_host_uri = "bolt://localhost:7687"
         
         # Current session info

@@ -491,18 +491,87 @@ async def get_config_history(component: Optional[str] = None, limit: int = 10):
 async def process_document_with_ollama(doc: DocumentIngest, embeddings: List[float]):
     """Background task to process document with local embeddings"""
     try:
-        logger.info(f"Processing document '{doc.title}' with {len(embeddings)} embeddings")
+        logger.info(f"🔄 STEP 1: Starting background processing for '{doc.title}' with {len(embeddings)} embeddings")
         
-        # TODO: Store embeddings in pgvector database
-        # TODO: Update Neo4j knowledge graph
-        # TODO: Index in Qdrant vector database
+        import sys
+        import os
+        sys.path.append(os.path.dirname(__file__))
         
-        # For now, just log the processing
-        await asyncio.sleep(1)  # Simulate processing time
-        logger.info(f"Document '{doc.title}' processed successfully")
+        logger.info(f"🔄 STEP 2: Starting imports for '{doc.title}'")
+        
+        from app.api.v1.ingestion.storage import StorageService
+        from app.api.v1.ingestion.models import IngestionRequest, ProcessedChunk, DocumentMetadata, FileFormat, ProcessingMethod, ChunkMetadata
+        from uuid import uuid4
+        
+        logger.info(f"📦 STEP 3: Imports successful, processing document '{doc.title}'")
+        
+        # Initialize storage service
+        storage = StorageService()
+        
+        # Create ingestion request with doc_type in metadata
+        metadata_with_doc_type = {
+            **doc.metadata,
+            "doc_type": doc.doc_type
+        }
+        
+        ingestion_request = IngestionRequest(
+            ingestion_id=f"ing_{uuid4().hex[:8]}",
+            file_path=f"/tmp/{doc.title}.md",
+            filename=f"{doc.title}.md",
+            project=doc.project,
+            tags=doc.tags,
+            metadata=metadata_with_doc_type,
+            file_size=len(doc.content.encode()),
+            mime_type="text/markdown"
+        )
+        
+        # Create document metadata
+        document_metadata = DocumentMetadata(
+            title=doc.title,
+            format=FileFormat.MD,
+            processing_method=ProcessingMethod.CUSTOM,
+            word_count=len(doc.content.split()),
+            language="en"
+        )
+        
+        # Create processed chunk
+        chunk_metadata = ChunkMetadata(
+            chunk_id=f"chunk_{uuid4().hex[:8]}",
+            document_id="",  # Will be set by storage
+            chunk_index=0,
+            start_char=0,
+            end_char=len(doc.content),
+            page_number=1
+        )
+        
+        processed_chunk = ProcessedChunk(
+            chunk_id=chunk_metadata.chunk_id,
+            content=doc.content,
+            metadata=chunk_metadata,
+            embeddings=embeddings,
+            token_count=len(doc.content.split()),
+            language="en"
+        )
+        
+        # Store document across all databases
+        logger.info(f"🔄 STEP 4: About to store document '{doc.title}' in storage service")
+        try:
+            document_id = await storage.store_document(
+                ingestion_request,
+                document_metadata,
+                [processed_chunk]
+            )
+            logger.info(f"✅ STEP 5: Document '{doc.title}' stored successfully with ID: {document_id}")
+        except Exception as storage_error:
+            logger.error(f"❌ STEP 5 FAILED: Storage error for '{doc.title}': {storage_error}")
+            import traceback
+            logger.error(f"Storage traceback: {traceback.format_exc()}")
+            raise
         
     except Exception as e:
         logger.error(f"Document processing failed: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
 @app.on_event("startup")
 async def startup_event():

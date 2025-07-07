@@ -46,13 +46,18 @@ services:
       context: ./services/diary-api
       dockerfile: Dockerfile
       args:
-        DOCKER_USERNAME: ${DOCKER_USERNAME}
-        DOCKER_TOKEN: ${DOCKER_TOKEN}
+        DOCKER_USERNAME: ${DOCKER_USERNAME:-}
+        DOCKER_TOKEN: ${DOCKER_TOKEN:-}
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
     container_name: fk2_fastapi
     restart: unless-stopped
     ports:
       - "8000:80"
     environment:
+      - BUILDX_BUILDER=${BUILDX_BUILDER:-}
       - PYTHONPATH=/app
       - LOG_LEVEL=info
       # Database connections

@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import asyncpg
 import httpx
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from neo4j import AsyncGraphDatabase
 
@@ -31,14 +31,14 @@ class StorageService:
     def __init__(self):
         # Database connections will be initialized on first use
         self._pg_pool: Optional[asyncpg.Pool] = None
-        self._qdrant_client: Optional[QdrantClient] = None
+        self._qdrant_client: Optional[AsyncQdrantClient] = None
         self._neo4j_driver = None
         
         # Configuration from environment
         self.pg_dsn = os.getenv("DATABASE_URL", "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2")
         self.qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
         self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
+        self.neo4j_uri = os.getenv("NEO4J_URI", "neo4j://neo4j:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
         self.neo4j_password = os.getenv("NEO4J_PASSWORD", "fk2025neo4j")
         
@@ -54,7 +54,7 @@ class StorageService:
     async def _ensure_qdrant(self):
         """Ensure Qdrant client and collection exist"""
         if self._qdrant_client is None:
-            self._qdrant_client = QdrantClient(
+            self._qdrant_client = AsyncQdrantClient(
                 url=self.qdrant_url,
                 api_key=self.qdrant_api_key,
                 timeout=30
@@ -62,9 +62,9 @@ class StorageService:
             
             # Create collection if it doesn't exist
             try:
-                collections = self._qdrant_client.get_collections().collections
-                if not any(c.name == self.qdrant_collection for c in collections):
-                    self._qdrant_client.create_collection(
+                collections = await self._qdrant_client.get_collections()
+                if not any(c.name == self.qdrant_collection for c in collections.collections):
+                    await self._qdrant_client.create_collection(
                         collection_name=self.qdrant_collection,
                         vectors_config=VectorParams(
                             size=self.embedding_dimension,
@@ -128,64 +128,56 @@ class StorageService:
         
         async with self._pg_pool.acquire() as conn:
             async with conn.transaction():
-                # Insert document
+                # Insert document using actual schema columns
+                combined_content = " ".join(chunk.content for chunk in chunks)
                 await conn.execute("""
                     INSERT INTO documents (
-                        id, filename, file_path, format, project,
-                        tags, metadata, file_size, mime_type,
-                        processing_method, word_count, language,
-                        ingestion_id, created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        id, title, content, project, doc_type,
+                        tags, metadata, embeddings
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                     document_id,
-                    request.filename,
-                    request.file_path,
-                    metadata.format.value,
+                    metadata.title,
+                    combined_content,
                     request.project,
+                    request.metadata.get('doc_type', 'ingested'),
                     request.tags,
                     json.dumps({
                         **request.metadata,
-                        "title": metadata.title,
-                        "author": metadata.author,
-                        "pages": metadata.pages
+                        "filename": getattr(request, 'filename', ''),
+                        "file_path": getattr(request, 'file_path', ''),
+                        "format": metadata.format.value,
+                        "processing_method": metadata.processing_method.value,
+                        "word_count": metadata.word_count,
+                        "language": metadata.language,
+                        "ingestion_id": request.ingestion_id,
+                        "file_size": getattr(request, 'file_size', 0),
+                        "mime_type": getattr(request, 'mime_type', 'text/plain')
                     }),
-                    request.file_size,
-                    request.mime_type,
-                    metadata.processing_method.value,
-                    metadata.word_count,
-                    metadata.language,
-                    request.ingestion_id,
-                    datetime.utcnow()
+                    chunks[0].embeddings if chunks and chunks[0].embeddings else None
                 )
                 
-                # Insert chunks
+                # Insert chunks using actual schema columns
                 for chunk in chunks:
-                    # Generate content hash for deduplication
-                    content_hash = hashlib.sha256(chunk.content.encode()).hexdigest()
-                    
                     await conn.execute("""
                         INSERT INTO document_chunks (
                             id, document_id, chunk_index, content,
-                            content_hash, metadata, token_count,
-                            embedding, created_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                        ON CONFLICT (content_hash) DO NOTHING
+                            embedding, metadata
+                        ) VALUES ($1, $2, $3, $4, $5, $6)
                     """,
                         chunk.chunk_id,
                         document_id,
                         chunk.metadata.chunk_index,
                         chunk.content,
-                        content_hash,
+                        chunk.embeddings,
                         json.dumps({
                             "start_char": chunk.metadata.start_char,
                             "end_char": chunk.metadata.end_char,
                             "page_number": chunk.metadata.page_number,
-                            "section": chunk.metadata.section,
-                            "language": chunk.language
-                        }),
-                        chunk.token_count,
-                        chunk.embeddings,  # pgvector will handle this
-                        datetime.utcnow()
+                            "section": getattr(chunk.metadata, 'section', None),
+                            "language": chunk.language,
+                            "token_count": chunk.token_count
+                        })
                     )
                     
     async def _store_in_qdrant(
@@ -226,7 +218,7 @@ class StorageService:
         
         if points:
             # Batch upload to Qdrant
-            self._qdrant_client.upsert(
+            await self._qdrant_client.upsert(
                 collection_name=self.qdrant_collection,
                 points=points
             )

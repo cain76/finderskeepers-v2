@@ -7,6 +7,14 @@ ARG DOCKER_TOKEN
 
 FROM python:3.11-slim AS builder
 
+# Install system dependencies for python-magic and other packages
+RUN apt-get update && apt-get install -y \
+    libmagic1 \
+    libmagic-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv - pinned version for reproducibility
 COPY --from=ghcr.io/astral-sh/uv:0.7.15 /uv /uvx /bin/
 
@@ -42,6 +50,11 @@ COPY . .
 
 # Production stage - smaller final image
 FROM python:3.11-slim
+
+# Install runtime dependencies (libmagic for python-magic)
+RUN apt-get update && apt-get install -y \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pass authentication args to production stage
 ARG DOCKER_USERNAME

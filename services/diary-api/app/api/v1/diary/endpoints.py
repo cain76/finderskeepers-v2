@@ -1,11 +1,18 @@
 """
-Diary API endpoints for agent session tracking
+Diary API endpoints for agent session tracking - REAL DATA ONLY
 """
 
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import logging
+import sys
+import os
+
+# Add the parent directory to the path so we can import from app
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+
+from app.database.queries import SessionQueries
 
 logger = logging.getLogger(__name__)
 
@@ -22,83 +29,22 @@ async def list_sessions(
     status: Optional[str] = None,
     project: Optional[str] = None
 ):
-    """Get agent sessions with filtering"""
+    """Get REAL agent sessions from PostgreSQL database"""
     try:
-        logger.info(f"Getting sessions: limit={limit}, agent_type={agent_type}, status={status}")
+        logger.info(f"Getting REAL sessions: limit={limit}, agent_type={agent_type}, status={status}")
         
-        # Mock response for now - would connect to actual database
-        sessions = [
-            {
-                "id": "session_001",
-                "agent_type": agent_type or "claude",
-                "session_start": "2025-07-08T08:00:00Z",
-                "session_end": None,
-                "status": status or "active",
-                "context": {"project": project or "finderskeepers-v2"},
-                "total_actions": 5,
-                "performance_metrics": {
-                    "avg_response_time": 150,
-                    "total_tokens_used": 1250,
-                    "error_count": 0
-                },
-                "metadata": {
-                    "project_name": project or "finderskeepers-v2",
-                    "session_type": "development",
-                    "tags": ["gui", "react"]
-                }
-            },
-            {
-                "id": "session_002",
-                "agent_type": "claude",
-                "session_start": "2025-07-08T07:30:00Z",
-                "session_end": "2025-07-08T08:15:00Z",
-                "status": "completed",
-                "context": {"project": "finderskeepers-v2"},
-                "total_actions": 12,
-                "performance_metrics": {
-                    "avg_response_time": 180,
-                    "total_tokens_used": 2840,
-                    "error_count": 1
-                },
-                "metadata": {
-                    "project_name": "finderskeepers-v2",
-                    "session_type": "backend-development",
-                    "tags": ["fastapi", "endpoints"]
-                }
-            },
-            {
-                "id": "session_003",
-                "agent_type": "gpt",
-                "session_start": "2025-07-07T16:45:00Z",
-                "session_end": "2025-07-07T17:20:00Z",
-                "status": "completed",
-                "context": {"project": "finderskeepers-v2"},
-                "total_actions": 8,
-                "performance_metrics": {
-                    "avg_response_time": 120,
-                    "total_tokens_used": 1650,
-                    "error_count": 0
-                },
-                "metadata": {
-                    "project_name": "finderskeepers-v2",
-                    "session_type": "documentation",
-                    "tags": ["docs", "setup"]
-                }
-            }
-        ]
-        
-        # Filter by agent_type if specified
-        if agent_type:
-            sessions = [s for s in sessions if s["agent_type"] == agent_type]
-        
-        # Filter by status if specified
-        if status:
-            sessions = [s for s in sessions if s["status"] == status]
+        # Get REAL sessions from database
+        sessions = await SessionQueries.get_sessions(
+            limit=limit,
+            agent_type=agent_type,
+            project=project,
+            status=status
+        )
         
         return {
             "success": True,
-            "data": sessions[:limit],
-            "message": f"Retrieved {len(sessions[:limit])} sessions",
+            "data": sessions,
+            "message": f"Retrieved {len(sessions)} REAL sessions from database",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
@@ -144,31 +90,17 @@ async def get_session(session_id: str):
 
 @router.get("/sessions/{session_id}/actions")
 async def get_session_actions(session_id: str):
-    """Get actions for a specific session"""
+    """Get REAL actions for a specific session from PostgreSQL"""
     try:
-        logger.info(f"Getting actions for session: {session_id}")
+        logger.info(f"Getting REAL actions for session: {session_id}")
         
-        # Mock response for now - would connect to actual database
-        actions = [
-            {
-                "id": f"action_{i}",
-                "session_id": session_id,
-                "action_type": "file_read" if i % 2 == 0 else "file_write",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "duration_ms": 100 + i * 10,
-                "success": True,
-                "description": f"Action {i} description",
-                "details": {"file": f"test_{i}.py"},
-                "files_affected": [f"test_{i}.py"],
-                "error_message": None
-            }
-            for i in range(5)
-        ]
+        # Get REAL actions from database
+        actions = await SessionQueries.get_session_actions(session_id)
         
         return {
             "success": True,
             "data": actions,
-            "message": f"Retrieved {len(actions)} actions",
+            "message": f"Retrieved {len(actions)} REAL actions from database",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:

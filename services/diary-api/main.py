@@ -19,6 +19,8 @@ from uuid import uuid4
 # Import API modules
 from app.api.v1.ingestion import ingestion_router
 from app.api.v1.diary import diary_router
+from app.database.connection import db_manager
+from app.database.queries import StatsQueries, SessionQueries, DocumentQueries
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -205,20 +207,23 @@ async def root():
 
 @app.get("/health", tags=["System"])
 async def health_check():
-    """System health check with Ollama status"""
+    """System health check with REAL database status"""
     try:
         # Check Ollama service
         ollama_healthy = await ollama_client.health_check()
+        
+        # Check ALL database services
+        db_health = await db_manager.health_check()
         
         return {
             "status": "healthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "services": {
                 "api": "up",
-                "postgres": "checking...",
-                "neo4j": "checking...",
-                "qdrant": "checking...",
-                "redis": "checking...",
+                "postgres": "up" if db_health['postgres'] else "down",
+                "neo4j": "up" if db_health['neo4j'] else "down",
+                "qdrant": "up" if db_health['qdrant'] else "down",
+                "redis": "up" if db_health['redis'] else "down",
                 "ollama": "up" if ollama_healthy else "down"
             },
             "local_llm": {
@@ -226,7 +231,8 @@ async def health_check():
                 "embedding_model": ollama_client.embedding_model,
                 "chat_model": ollama_client.chat_model,
                 "healthy": ollama_healthy
-            }
+            },
+            "database_details": db_health['details']
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -514,35 +520,17 @@ async def get_config_history(component: Optional[str] = None, limit: int = 10):
 
 @app.get("/api/stats/sessions", tags=["Statistics"])
 async def get_session_stats(timeframe: str = "24h"):
-    """Get session statistics for specified timeframe"""
+    """Get REAL session statistics from PostgreSQL database"""
     try:
-        logger.info(f"Getting session stats for timeframe: {timeframe}")
+        logger.info(f"Getting REAL session stats for timeframe: {timeframe}")
         
-        # Mock statistics based on timeframe
-        stats = {
-            "timeframe": timeframe,
-            "total_sessions": 25,
-            "active_sessions": 3,
-            "completed_sessions": 20,
-            "error_sessions": 2,
-            "avg_duration_minutes": 45.2,
-            "total_actions": 156,
-            "avg_actions_per_session": 6.2,
-            "agent_breakdown": {
-                "claude": 15,
-                "gpt": 8,
-                "local": 2
-            },
-            "timeline": [
-                {"time": f"{i:02d}:00", "sessions": 2 + i % 5, "actions": 10 + i * 2}
-                for i in range(24)
-            ]
-        }
+        # Get REAL statistics from database
+        stats = await StatsQueries.get_session_stats(timeframe)
         
         return {
             "success": True,
             "data": stats,
-            "message": f"Retrieved session statistics for {timeframe}",
+            "message": f"Retrieved REAL session statistics for {timeframe}",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
@@ -551,38 +539,17 @@ async def get_session_stats(timeframe: str = "24h"):
 
 @app.get("/api/stats/documents", tags=["Statistics"])
 async def get_document_stats():
-    """Get document and vector database statistics"""
+    """Get REAL document and vector database statistics"""
     try:
-        logger.info("Getting document statistics")
+        logger.info("Getting REAL document statistics")
         
-        stats = {
-            "total_documents": 847,
-            "total_chunks": 3421,
-            "vectors_stored": 3421,
-            "storage_used_mb": 2048.5,
-            "avg_similarity_score": 0.73,
-            "document_types": {
-                "pdf": 245,
-                "markdown": 398,
-                "text": 156,
-                "docx": 48
-            },
-            "projects": {
-                "finderskeepers-v2": 423,
-                "bitcoin-analysis": 201,
-                "ai-research": 156,
-                "documentation": 67
-            },
-            "ingestion_timeline": [
-                {"date": f"2025-07-{i:02d}", "documents": 15 + i * 3}
-                for i in range(1, 8)
-            ]
-        }
+        # Get REAL statistics from database
+        stats = await StatsQueries.get_document_stats()
         
         return {
             "success": True,
             "data": stats,
-            "message": "Retrieved document statistics",
+            "message": "Retrieved REAL document statistics",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
@@ -591,43 +558,17 @@ async def get_document_stats():
 
 @app.get("/api/stats/performance", tags=["Statistics"])
 async def get_performance_metrics():
-    """Get system performance metrics and API response times"""
+    """Get REAL system performance metrics and API response times"""
     try:
-        logger.info("Getting performance metrics")
+        logger.info("Getting REAL performance metrics")
         
-        metrics = {
-            "avg_response_time": 142.5,
-            "p95_response_time": 285.0,
-            "p99_response_time": 450.0,
-            "error_rate": 0.025,
-            "requests_per_minute": 45.2,
-            "active_connections": 12,
-            "memory_usage_percent": 68.5,
-            "cpu_usage_percent": 23.8,
-            "disk_usage_percent": 45.2,
-            "timeline": [
-                {
-                    "time": f"{i:02d}:00",
-                    "response_time": 120 + (i % 6) * 20,
-                    "error_rate": 0.01 + (i % 3) * 0.005,
-                    "active_sessions": 5 + (i % 4),
-                    "memory_usage": 60 + (i % 8) * 2
-                }
-                for i in range(24)
-            ],
-            "ollama_stats": {
-                "embeddings_generated": 2847,
-                "avg_embedding_time": 85.2,
-                "model_memory_usage": 2048,
-                "successful_requests": 2835,
-                "failed_requests": 12
-            }
-        }
+        # Get REAL performance metrics from database
+        metrics = await StatsQueries.get_performance_metrics()
         
         return {
             "success": True,
             "data": metrics,
-            "message": "Retrieved performance metrics",
+            "message": "Retrieved REAL performance metrics",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
@@ -725,8 +666,11 @@ async def process_document_with_ollama(doc: DocumentIngest, embeddings: List[flo
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the application with Ollama health check"""
+    """Initialize the application with REAL database connections"""
     logger.info("🔍 FindersKeepers v2 API starting up...")
+    
+    # Initialize ALL database connections
+    db_results = await db_manager.initialize_all()
     
     # Check Ollama connection
     if ollama_client.use_local:
@@ -738,7 +682,12 @@ async def startup_event():
     else:
         logger.info("🌐 Local LLM disabled - Using external API mode")
     
-    logger.info("🚀 Ready to track agent sessions and manage knowledge!")
+    # Report database connection status
+    for db_name, connected in db_results.items():
+        status = "✅ Connected" if connected else "❌ Failed"
+        logger.info(f"🗄️  {db_name.upper()}: {status}")
+    
+    logger.info("🚀 Ready to track agent sessions and manage knowledge with REAL DATA!")
 
 if __name__ == "__main__":
     import uvicorn

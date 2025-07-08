@@ -575,6 +575,28 @@ async def get_performance_metrics():
         logger.error(f"Performance metrics retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/stats/system", tags=["Statistics"])
+async def get_system_monitoring():
+    """Get REAL system monitoring data including Docker containers and host metrics"""
+    try:
+        logger.info("Getting REAL system monitoring data")
+        
+        # Import system monitoring
+        from app.monitoring.system_stats import system_monitor
+        
+        # Get comprehensive system stats
+        system_stats = await system_monitor.get_comprehensive_system_stats()
+        
+        return {
+            "success": True,
+            "data": system_stats,
+            "message": "Retrieved REAL system monitoring data",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"System monitoring retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ========================================
 # STARTUP EVENT
 # ========================================

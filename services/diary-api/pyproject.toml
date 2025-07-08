@@ -38,6 +38,8 @@ dependencies = [
     # Monitoring & Logging
     "structlog>=23.2.0", # Structured logging
     "prometheus-client>=0.19.0", # Metrics
+    "psutil>=5.9.0", # System monitoring
+    "docker>=7.0.0", # Docker container monitoring
 ]
 
 [dependency-groups]

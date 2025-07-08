@@ -1,15 +1,7 @@
-// Working version with simplified components
+import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline } from '@mui/material';
-import AppLayout from '@/components/layout/AppLayout_simple';
-import Dashboard from '@/pages/Dashboard';
-import Documents from '@/pages/Documents';
-import VectorSearch from '@/pages/VectorSearch';
-import KnowledgeGraph from '@/pages/KnowledgeGraph';
-import AgentSessions from '@/pages/AgentSessions';
-import SystemMonitoring from '@/pages/SystemMonitoring';
-import Chat from '@/pages/Chat';
+import { CssBaseline, Container, Paper, Typography, Box, TextField, Button } from '@mui/material';
 
 const theme = createTheme({
   palette: {
@@ -17,58 +9,94 @@ const theme = createTheme({
     primary: {
       main: '#1976d2',
     },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f5f5f5',
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h6: {
-      fontWeight: 600,
-    },
-  },
-  components: {
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          borderRadius: 8,
-        },
-      },
-    },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          borderRadius: 6,
-        },
-      },
-    },
   },
 });
+
+function Dashboard() {
+  return <div style={{padding: '20px'}}><h1>Dashboard</h1><p>Welcome to FindersKeepers v2!</p></div>;
+}
+
+
+function Chat() {
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([
+    { role: 'assistant', content: 'Hello! I am your AI assistant. How can I help you today?' }
+  ]);
+
+  const sendMessage = () => {
+    if (!message.trim()) return;
+    
+    setMessages(prev => [...prev, 
+      { role: 'user', content: message },
+      { role: 'assistant', content: 'This is a test response. The backend is not connected yet.' }
+    ]);
+    setMessage('');
+  };
+
+  return (
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        AI Chat Assistant
+      </Typography>
+      
+      <Paper sx={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+          {messages.map((msg, index) => (
+            <Box key={index} sx={{ mb: 2, textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+              <Typography variant="caption" color="text.secondary">
+                {msg.role === 'user' ? 'You' : 'Assistant'}
+              </Typography>
+              <Typography variant="body1" sx={{ 
+                background: msg.role === 'user' ? '#1976d2' : '#f5f5f5',
+                color: msg.role === 'user' ? 'white' : 'black',
+                padding: '8px 12px', 
+                borderRadius: '8px', 
+                display: 'inline-block',
+                maxWidth: '70%'
+              }}>
+                {msg.content}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+        
+        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
+          <TextField
+            fullWidth
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Type your message..."
+          />
+          <Button variant="contained" onClick={sendMessage}>
+            Send
+          </Button>
+        </Box>
+      </Paper>
+    </Container>
+  );
+}
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="sessions" element={<AgentSessions />} />
-            <Route path="documents" element={<Documents />} />
-            <Route path="search" element={<VectorSearch />} />
-            <Route path="graph" element={<KnowledgeGraph />} />
-            <Route path="monitoring" element={<SystemMonitoring />} />
-            <Route path="chat" element={<Chat />} />
-            <Route path="settings" element={<div>Settings Page</div>} />
-          </Route>
-        </Routes>
+        <div style={{display: 'flex', minHeight: '100vh'}}>
+          <nav style={{width: '200px', background: '#f0f0f0', padding: '20px'}}>
+            <h3>FindersKeepers v2</h3>
+            <ul style={{listStyle: 'none', padding: 0}}>
+              <li><a href="/" style={{color: '#1976d2', textDecoration: 'none'}}>Dashboard</a></li>
+              <li><a href="/chat" style={{color: '#1976d2', textDecoration: 'none'}}>AI Chat</a></li>
+            </ul>
+          </nav>
+          <main style={{flex: 1, padding: '20px'}}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/chat" element={<Chat />} />
+            </Routes>
+          </main>
+        </div>
       </Router>
     </ThemeProvider>
   );

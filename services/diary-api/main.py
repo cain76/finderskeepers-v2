@@ -21,6 +21,7 @@ from app.api.v1.ingestion import ingestion_router
 from app.api.v1.diary import diary_router
 from app.database.connection import db_manager
 from app.database.queries import StatsQueries, SessionQueries, DocumentQueries
+from app.api.chat_endpoints import ChatRequest, ChatResponse, process_chat_message
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -595,6 +596,82 @@ async def get_system_monitoring():
         }
     except Exception as e:
         logger.error(f"System monitoring retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========================================
+# CHAT API - AI Assistant with Knowledge Integration
+# ========================================
+
+@app.post("/api/chat", tags=["Chat"], response_model=ChatResponse)
+async def chat_with_assistant(request: ChatRequest):
+    """Chat with AI assistant using knowledge graph and vector search"""
+    try:
+        logger.info(f"Processing chat message: {request.message[:100]}...")
+        
+        # Process the chat request
+        response = await process_chat_message(request)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Chat processing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/conversations", tags=["Chat"])
+async def get_conversations():
+    """Get list of active conversations"""
+    try:
+        from app.api.chat_endpoints import conversations
+        
+        conversation_list = []
+        for conv_id, messages in conversations.items():
+            if messages:
+                last_message = messages[-1]
+                conversation_list.append({
+                    "conversation_id": conv_id,
+                    "last_message": last_message.content[:100] + "..." if len(last_message.content) > 100 else last_message.content,
+                    "last_updated": last_message.timestamp.isoformat() if last_message.timestamp else None,
+                    "message_count": len(messages)
+                })
+        
+        return {
+            "success": True,
+            "conversations": conversation_list,
+            "total": len(conversation_list)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/conversations/{conversation_id}", tags=["Chat"])
+async def get_conversation_history(conversation_id: str):
+    """Get conversation history"""
+    try:
+        from app.api.chat_endpoints import conversations
+        
+        if conversation_id not in conversations:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        messages = conversations[conversation_id]
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "messages": [
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
+                }
+                for msg in messages
+            ],
+            "message_count": len(messages)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get conversation history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================

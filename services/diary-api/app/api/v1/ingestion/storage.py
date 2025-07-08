@@ -11,6 +11,7 @@ import hashlib
 from uuid import uuid4
 
 import asyncpg
+from pgvector.asyncpg import register_vector
 import httpx
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
@@ -44,12 +45,21 @@ class StorageService:
         
         # Collection names
         self.qdrant_collection = "fk2_documents"
-        self.embedding_dimension = 1536  # mxbai-embed-large dimension
+        self.embedding_dimension = 1024  # mxbai-embed-large actual dimension
         
     async def _ensure_pg_pool(self):
         """Ensure PostgreSQL connection pool exists"""
         if self._pg_pool is None:
-            self._pg_pool = await asyncpg.create_pool(self.pg_dsn, min_size=1, max_size=10)
+            self._pg_pool = await asyncpg.create_pool(
+                self.pg_dsn, 
+                min_size=1, 
+                max_size=10,
+                init=self._configure_connection
+            )
+    
+    async def _configure_connection(self, conn):
+        """Configure each connection to support pgvector"""
+        await register_vector(conn)
             
     async def _ensure_qdrant(self):
         """Ensure Qdrant client and collection exist"""
@@ -95,7 +105,7 @@ class StorageService:
         Returns:
             Document ID
         """
-        document_id = f"doc_{uuid4().hex[:12]}"
+        document_id = str(uuid4())
         
         try:
             # Store in PostgreSQL
@@ -135,7 +145,7 @@ class StorageService:
                         id, title, content, project, doc_type,
                         tags, metadata, embeddings
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                """,
+                """, 
                     document_id,
                     metadata.title,
                     combined_content,
@@ -164,12 +174,12 @@ class StorageService:
                             id, document_id, chunk_index, content,
                             embedding, metadata
                         ) VALUES ($1, $2, $3, $4, $5, $6)
-                    """,
+                    """, 
                         chunk.chunk_id,
                         document_id,
                         chunk.metadata.chunk_index,
                         chunk.content,
-                        chunk.embeddings,
+                        chunk.embeddings if chunk.embeddings else None,
                         json.dumps({
                             "start_char": chunk.metadata.start_char,
                             "end_char": chunk.metadata.end_char,
@@ -460,7 +470,7 @@ class StorageService:
         try:
             await self._ensure_pg_pool()
             async with self._pg_pool.acquire() as conn:
-                await conn.fetchval("SELECT 1")
+                await conn.fetchrow("SELECT 1")
             health["postgres"] = True
         except:
             pass

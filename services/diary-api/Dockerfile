@@ -34,7 +34,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         uv sync --locked --no-install-project --no-editable; \
     else \
         uv sync --no-install-project --no-editable; \
-    fi
+    fi && \
+    # Remove opencv-python to avoid conflicts with opencv-python-headless \
+    uv pip uninstall opencv-python || true
 
 # Copy application code
 COPY . .
@@ -50,9 +52,15 @@ COPY . .
 # Production stage - smaller final image
 FROM python:3.11-slim
 
-# Install runtime dependencies (libmagic for python-magic)
+# Install runtime dependencies (complete list for EasyOCR + OpenCV)
 RUN apt-get update && apt-get install -y \
     libmagic1 \
+    libglib2.0-0 \
+    libgl1-mesa-glx \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Pass authentication args to production stage

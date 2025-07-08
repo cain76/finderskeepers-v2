@@ -14,6 +14,7 @@ import json
 import logging
 import httpx
 import asyncio
+from uuid import uuid4
 
 # Import ingestion module
 from app.api.v1.ingestion import ingestion_router
@@ -391,7 +392,7 @@ async def ingest_document(doc: DocumentIngest, background_tasks: BackgroundTasks
         return {
             "status": "accepted",
             "message": f"Document '{doc.title}' queued for processing with local embeddings",
-            "document_id": f"doc_{int(datetime.now().timestamp())}",
+            "document_id": str(uuid4()),
             "project": doc.project,
             "embeddings_generated": len(doc_embeddings) > 0,
             "local_processing": ollama_client.use_local

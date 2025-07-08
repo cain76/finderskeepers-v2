@@ -12,6 +12,7 @@ import json
 import yaml
 import csv
 from datetime import datetime
+from uuid import uuid4
 
 # Document processing libraries
 try:
@@ -176,8 +177,10 @@ class DocumentProcessor:
             )
             
             # Extract additional metadata from first document
+            # Note: Store LangChain metadata in format-specific field
             if documents and documents[0].metadata:
-                doc_metadata.metadata = documents[0].metadata
+                # Store in pdf_metadata field for now (can be used for any format)
+                doc_metadata.pdf_metadata = documents[0].metadata
             
             # Chunk the text
             chunks = self._chunk_text(full_text, file_path)
@@ -442,15 +445,15 @@ class DocumentProcessor:
     def _chunk_text(self, text: str, source_file: str) -> List[ProcessedChunk]:
         """Chunk text into smaller pieces"""
         chunks = []
-        doc_id = f"doc_{hash(source_file)}"
+        document_id = str(uuid4())
         
         # Simple character-based chunking (can be improved with semantic chunking)
         for i in range(0, len(text), self.chunk_size - self.chunk_overlap):
             chunk_text = text[i:i + self.chunk_size]
             
             chunk_metadata = ChunkMetadata(
-                chunk_id=f"{doc_id}_chunk_{len(chunks)}",
-                document_id=doc_id,
+                chunk_id=str(uuid4()),
+                document_id=document_id,
                 chunk_index=len(chunks),
                 start_char=i,
                 end_char=min(i + self.chunk_size, len(text))
@@ -469,7 +472,7 @@ class DocumentProcessor:
     def _chunk_transcription(self, whisper_result: Dict, source_file: str) -> List[ProcessedChunk]:
         """Chunk transcription with timestamps"""
         chunks = []
-        doc_id = f"doc_{hash(source_file)}"
+        document_id = str(uuid4())
         
         # Use Whisper segments for natural chunking
         current_chunk = []
@@ -483,8 +486,8 @@ class DocumentProcessor:
             # Create chunk when reaching size limit
             if len(current_text) >= self.chunk_size:
                 chunk_metadata = ChunkMetadata(
-                    chunk_id=f"{doc_id}_chunk_{len(chunks)}",
-                    document_id=doc_id,
+                    chunk_id=f"{document_id}_chunk_{len(chunks)}",
+                    document_id=document_id,
                     chunk_index=len(chunks),
                     start_char=int(current_chunk[0]["start"]),
                     end_char=int(current_chunk[-1]["end"])
@@ -504,8 +507,8 @@ class DocumentProcessor:
         # Add final chunk
         if current_text:
             chunk_metadata = ChunkMetadata(
-                chunk_id=f"{doc_id}_chunk_{len(chunks)}",
-                document_id=doc_id,
+                chunk_id=f"{document_id}_chunk_{len(chunks)}",
+                document_id=document_id,
                 chunk_index=len(chunks),
                 start_char=int(current_chunk[0]["start"]) if current_chunk else 0,
                 end_char=int(current_chunk[-1]["end"]) if current_chunk else 0

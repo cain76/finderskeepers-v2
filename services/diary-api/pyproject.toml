@@ -10,6 +10,7 @@ dependencies = [
     "uvicorn[standard]>=0.24.0",
     # Database Drivers
     "asyncpg>=0.29.0", # PostgreSQL async driver
+    "pgvector>=0.2.0", # pgvector support for PostgreSQL
     "neo4j>=5.15.0", # Neo4j graph database
     "redis>=5.0.1", # Redis caching
     "qdrant-client>=1.7.0", # Qdrant vector database
@@ -31,7 +32,7 @@ dependencies = [
     "python-magic>=0.4.27", # File type detection
     "unstructured[all-docs]>=0.10.0", # Universal document parsing
     "langchain-community>=0.0.13", # Document loaders
-    "easyocr>=1.7.0", # OCR processing
+    "easyocr>=1.7.0", # OCR processing (includes opencv-python-headless)
     "openai-whisper>=20231117", # Audio transcription
     "Pillow>=10.0.0", # Image processing
     # Monitoring & Logging

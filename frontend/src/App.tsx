@@ -9,6 +9,7 @@ import VectorSearch from '@/pages/VectorSearch';
 import KnowledgeGraph from '@/pages/KnowledgeGraph';
 import AgentSessions from '@/pages/AgentSessions';
 import SystemMonitoring from '@/pages/SystemMonitoring';
+import Chat from '@/pages/Chat';
 
 const theme = createTheme({
   palette: {
@@ -64,6 +65,7 @@ function App() {
             <Route path="search" element={<VectorSearch />} />
             <Route path="graph" element={<KnowledgeGraph />} />
             <Route path="monitoring" element={<SystemMonitoring />} />
+            <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<div>Settings Page</div>} />
           </Route>
         </Routes>

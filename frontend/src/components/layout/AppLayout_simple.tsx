@@ -21,6 +21,7 @@ import {
   Search as SearchIcon,
   AccountTree as GraphIcon,
   MonitorHeart as MonitoringIcon,
+  Chat as ChatIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -33,6 +34,7 @@ const navigationItems = [
   { text: 'Documents', icon: <DocumentsIcon />, path: '/documents' },
   { text: 'Vector Search', icon: <SearchIcon />, path: '/search' },
   { text: 'Knowledge Graph', icon: <GraphIcon />, path: '/graph' },
+  { text: 'AI Chat', icon: <ChatIcon />, path: '/chat' },
   { text: 'System Monitoring', icon: <MonitoringIcon />, path: '/monitoring' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];

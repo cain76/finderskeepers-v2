@@ -121,19 +121,12 @@
     },
     "n8n": {
       "type": "stdio",
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e", "MCP_MODE=stdio",
-        "-e", "LOG_LEVEL=error",
-        "-e", "DISABLE_CONSOLE_OUTPUT=true",
-        "-e", "N8N_API_URL=http://localhost:5678",
-        "-e", "N8N_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MjI3MzkyMC04NGVmLTRhZDUtYjlmOC1hOTU4MjBlNWUxZDMiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUxNzE3NDMwfQ.HagxY3gKIKm7imKBqolOfKW4uSObJYApFRL1XMvhsBw",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
-      ],
-      "env": {}
+      "command": "/media/cain/linux_storage/projects/finderskeepers-v2/scripts/mcp-n8n-container.sh",
+      "args": [],
+      "env": {
+        "N8N_API_URL": "http://localhost:5678",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MjI3MzkyMC04NGVmLTRhZDUtYjlmOC1hOTU4MjBlNWUxZDMiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUxNzE3NDMwfQ.HagxY3gKIKm7imKBqolOfKW4uSObJYApFRL1XMvhsBw"
+      }
     },
     "kubernetes": {
       "type": "stdio",

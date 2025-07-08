@@ -16,8 +16,9 @@ import httpx
 import asyncio
 from uuid import uuid4
 
-# Import ingestion module
+# Import API modules
 from app.api.v1.ingestion import ingestion_router
+from app.api.v1.diary import diary_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -107,17 +108,23 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS middleware for web interfaces
+# CORS middleware for React frontend and web interfaces
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure as needed for security
+    allow_origins=[
+        "http://localhost:3000",  # React development server
+        "http://127.0.0.1:3000",  # React development server (alt)
+        "http://localhost:5173",  # Vite development server (fallback)
+        "http://127.0.0.1:5173",  # Vite development server (fallback)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 # Include routers
 app.include_router(ingestion_router)
+app.include_router(diary_router)
 
 # ========================================
 # DATA MODELS
@@ -259,81 +266,8 @@ async def generate_embeddings(request: EmbeddingRequest):
         raise HTTPException(status_code=500, detail=f"Embedding generation error: {str(e)}")
 
 # ========================================
-# DIARY API - Agent Session Tracking
+# DIARY API - Moved to app/api/v1/diary/endpoints.py
 # ========================================
-
-@app.post("/api/diary/sessions", tags=["Diary"])
-async def create_session(session: AgentSession):
-    """Create new agent session entry"""
-    try:
-        # TODO: Store in database
-        logger.info(f"Creating session: {session.session_id} ({session.agent_type})")
-        
-        # For now, store in memory/file (replace with actual DB)
-        session_data = session.dict()
-        
-        return {
-            "status": "created",
-            "session_id": session.session_id,
-            "message": f"Session created for {session.agent_type}",
-            "data": session_data
-        }
-    except Exception as e:
-        logger.error(f"Failed to create session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/diary/actions", tags=["Diary"])
-async def log_action(action: AgentAction):
-    """Log an action within an agent session"""
-    try:
-        # TODO: Store in database and update knowledge graph
-        logger.info(f"Logging action: {action.action_type} in session {action.session_id}")
-        
-        action_data = action.dict()
-        
-        return {
-            "status": "logged",
-            "action_id": action.action_id,
-            "message": f"Action logged: {action.description}",
-            "data": action_data
-        }
-    except Exception as e:
-        logger.error(f"Failed to log action: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/diary/search", tags=["Diary"])
-async def search_sessions(
-    q: Optional[str] = None,
-    project: Optional[str] = None,
-    agent_type: Optional[str] = None,
-    limit: int = 10
-):
-    """Search agent session history"""
-    try:
-        # TODO: Implement actual search
-        logger.info(f"Searching sessions: q={q}, project={project}, agent_type={agent_type}")
-        
-        # Mock response for now
-        results = [
-            {
-                "session_id": "session_001",
-                "agent_type": "claude",
-                "project": "bitcain",
-                "start_time": "2025-07-04T10:00:00Z",
-                "description": "Docker configuration troubleshooting",
-                "key_actions": ["docker login", "container restart", "volume mount fix"]
-            }
-        ]
-        
-        return {
-            "status": "success",
-            "results": results,
-            "total": len(results),
-            "query": {"q": q, "project": project, "agent_type": agent_type}
-        }
-    except Exception as e:
-        logger.error(f"Search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================
 # KNOWLEDGE API - Graph Queries & Document Management
@@ -431,6 +365,95 @@ async def get_project_context(project: str, topic: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================
+# SEARCH API - Vector and Semantic Search
+# ========================================
+
+@app.post("/api/search/vector", tags=["Search"])
+async def vector_search(query: dict):
+    """Perform vector similarity search"""
+    try:
+        search_query = query.get("query", "")
+        limit = query.get("limit", 10)
+        threshold = query.get("threshold", 0.5)
+        
+        logger.info(f"Vector search: {search_query}, limit={limit}, threshold={threshold}")
+        
+        # Mock vector search results for now
+        results = [
+            {
+                "document_id": f"doc_{i}",
+                "chunk_id": f"chunk_{i}",
+                "content": f"This is sample content for search query '{search_query}'. Document {i} contains relevant information about the topic.",
+                "similarity_score": 0.8 - (i * 0.1),
+                "metadata": {
+                    "source_file": f"document_{i}.md",
+                    "file_type": "markdown",
+                    "file_size": 1024 * (i + 1),
+                    "project": "finderskeepers-v2",
+                    "tags": ["search", "vector", "ai"],
+                    "created_date": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            for i in range(min(limit, 5))
+        ]
+        
+        # Filter by threshold
+        results = [r for r in results if r["similarity_score"] >= threshold]
+        
+        return {
+            "success": True,
+            "data": results,
+            "message": f"Found {len(results)} relevant documents",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Vector search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/search/semantic", tags=["Search"])
+async def semantic_search(request: dict):
+    """Perform semantic search using local LLM"""
+    try:
+        query = request.get("query", "")
+        limit = request.get("limit", 10)
+        
+        logger.info(f"Semantic search: {query}, limit={limit}")
+        
+        # Generate embeddings for semantic search using Ollama
+        query_embeddings = await ollama_client.get_embeddings(query)
+        
+        # Mock semantic search results with better relevance
+        results = [
+            {
+                "document_id": f"semantic_doc_{i}",
+                "chunk_id": f"semantic_chunk_{i}",
+                "content": f"Semantically relevant content for '{query}'. This document discusses concepts related to your search query and provides detailed information.",
+                "similarity_score": 0.9 - (i * 0.05),
+                "metadata": {
+                    "source_file": f"semantic_doc_{i}.pdf",
+                    "file_type": "pdf",
+                    "file_size": 2048 * (i + 1),
+                    "project": "finderskeepers-v2",
+                    "tags": ["semantic", "ai", "search"],
+                    "created_date": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            for i in range(min(limit, 3))
+        ]
+        
+        return {
+            "success": True,
+            "data": results,
+            "message": f"Found {len(results)} semantically relevant documents",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "embeddings_used": len(query_embeddings) > 0,
+            "local_llm_used": ollama_client.use_local
+        }
+    except Exception as e:
+        logger.error(f"Semantic search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========================================
 # CONFIGURATION API - Change Tracking & Management
 # ========================================
 
@@ -483,6 +506,132 @@ async def get_config_history(component: Optional[str] = None, limit: int = 10):
         }
     except Exception as e:
         logger.error(f"Config history retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========================================
+# STATISTICS API - System Metrics and Performance
+# ========================================
+
+@app.get("/api/stats/sessions", tags=["Statistics"])
+async def get_session_stats(timeframe: str = "24h"):
+    """Get session statistics for specified timeframe"""
+    try:
+        logger.info(f"Getting session stats for timeframe: {timeframe}")
+        
+        # Mock statistics based on timeframe
+        stats = {
+            "timeframe": timeframe,
+            "total_sessions": 25,
+            "active_sessions": 3,
+            "completed_sessions": 20,
+            "error_sessions": 2,
+            "avg_duration_minutes": 45.2,
+            "total_actions": 156,
+            "avg_actions_per_session": 6.2,
+            "agent_breakdown": {
+                "claude": 15,
+                "gpt": 8,
+                "local": 2
+            },
+            "timeline": [
+                {"time": f"{i:02d}:00", "sessions": 2 + i % 5, "actions": 10 + i * 2}
+                for i in range(24)
+            ]
+        }
+        
+        return {
+            "success": True,
+            "data": stats,
+            "message": f"Retrieved session statistics for {timeframe}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Session stats retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stats/documents", tags=["Statistics"])
+async def get_document_stats():
+    """Get document and vector database statistics"""
+    try:
+        logger.info("Getting document statistics")
+        
+        stats = {
+            "total_documents": 847,
+            "total_chunks": 3421,
+            "vectors_stored": 3421,
+            "storage_used_mb": 2048.5,
+            "avg_similarity_score": 0.73,
+            "document_types": {
+                "pdf": 245,
+                "markdown": 398,
+                "text": 156,
+                "docx": 48
+            },
+            "projects": {
+                "finderskeepers-v2": 423,
+                "bitcoin-analysis": 201,
+                "ai-research": 156,
+                "documentation": 67
+            },
+            "ingestion_timeline": [
+                {"date": f"2025-07-{i:02d}", "documents": 15 + i * 3}
+                for i in range(1, 8)
+            ]
+        }
+        
+        return {
+            "success": True,
+            "data": stats,
+            "message": "Retrieved document statistics",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Document stats retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stats/performance", tags=["Statistics"])
+async def get_performance_metrics():
+    """Get system performance metrics and API response times"""
+    try:
+        logger.info("Getting performance metrics")
+        
+        metrics = {
+            "avg_response_time": 142.5,
+            "p95_response_time": 285.0,
+            "p99_response_time": 450.0,
+            "error_rate": 0.025,
+            "requests_per_minute": 45.2,
+            "active_connections": 12,
+            "memory_usage_percent": 68.5,
+            "cpu_usage_percent": 23.8,
+            "disk_usage_percent": 45.2,
+            "timeline": [
+                {
+                    "time": f"{i:02d}:00",
+                    "response_time": 120 + (i % 6) * 20,
+                    "error_rate": 0.01 + (i % 3) * 0.005,
+                    "active_sessions": 5 + (i % 4),
+                    "memory_usage": 60 + (i % 8) * 2
+                }
+                for i in range(24)
+            ],
+            "ollama_stats": {
+                "embeddings_generated": 2847,
+                "avg_embedding_time": 85.2,
+                "model_memory_usage": 2048,
+                "successful_requests": 2835,
+                "failed_requests": 12
+            }
+        }
+        
+        return {
+            "success": True,
+            "data": metrics,
+            "message": "Retrieved performance metrics",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Performance metrics retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================

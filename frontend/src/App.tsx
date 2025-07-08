@@ -7,6 +7,8 @@ import Dashboard from '@/pages/Dashboard';
 import Documents from '@/pages/Documents';
 import VectorSearch from '@/pages/VectorSearch';
 import KnowledgeGraph from '@/pages/KnowledgeGraph';
+import AgentSessions from '@/pages/AgentSessions';
+import SystemMonitoring from '@/pages/SystemMonitoring';
 
 const theme = createTheme({
   palette: {
@@ -57,11 +59,11 @@ function App() {
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
-            <Route path="sessions" element={<div>Agent Sessions Page</div>} />
+            <Route path="sessions" element={<AgentSessions />} />
             <Route path="documents" element={<Documents />} />
             <Route path="search" element={<VectorSearch />} />
             <Route path="graph" element={<KnowledgeGraph />} />
-            <Route path="monitoring" element={<div>System Monitoring Page</div>} />
+            <Route path="monitoring" element={<SystemMonitoring />} />
             <Route path="settings" element={<div>Settings Page</div>} />
           </Route>
         </Routes>

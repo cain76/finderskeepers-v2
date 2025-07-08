@@ -16,6 +16,30 @@ function Dashboard() {
   return <div style={{padding: '20px'}}><h1>Dashboard</h1><p>Welcome to FindersKeepers v2!</p></div>;
 }
 
+function AgentSessions() {
+  return <div style={{padding: '20px'}}><h1>Agent Sessions</h1><p>Track AI agent interactions and sessions</p></div>;
+}
+
+function Documents() {
+  return <div style={{padding: '20px'}}><h1>Documents</h1><p>Manage and search your document library</p></div>;
+}
+
+function VectorSearch() {
+  return <div style={{padding: '20px'}}><h1>Vector Search</h1><p>Semantic search across your knowledge base</p></div>;
+}
+
+function KnowledgeGraph() {
+  return <div style={{padding: '20px'}}><h1>Knowledge Graph</h1><p>Visualize entity relationships and connections</p></div>;
+}
+
+function SystemMonitoring() {
+  return <div style={{padding: '20px'}}><h1>System Monitoring</h1><p>Monitor Docker containers and system performance</p></div>;
+}
+
+function Settings() {
+  return <div style={{padding: '20px'}}><h1>Settings</h1><p>Configure your FindersKeepers preferences</p></div>;
+}
+
 
 function Chat() {
   const [message, setMessage] = useState('');
@@ -83,17 +107,29 @@ function App() {
       <CssBaseline />
       <Router>
         <div style={{display: 'flex', minHeight: '100vh'}}>
-          <nav style={{width: '200px', background: '#f0f0f0', padding: '20px'}}>
-            <h3>FindersKeepers v2</h3>
-            <ul style={{listStyle: 'none', padding: 0}}>
-              <li><a href="/" style={{color: '#1976d2', textDecoration: 'none'}}>Dashboard</a></li>
-              <li><a href="/chat" style={{color: '#1976d2', textDecoration: 'none'}}>AI Chat</a></li>
+          <nav style={{width: '240px', background: '#f0f0f0', padding: '20px', borderRight: '1px solid #ddd'}}>
+            <h3 style={{margin: '0 0 20px 0', color: '#1976d2'}}>FindersKeepers v2</h3>
+            <ul style={{listStyle: 'none', padding: 0, margin: 0}}>
+              <li style={{marginBottom: '10px'}}><a href="/" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>📊 Dashboard</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/sessions" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>🤖 Agent Sessions</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/documents" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>📄 Documents</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/search" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>🔍 Vector Search</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/graph" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>🕸️ Knowledge Graph</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/chat" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>💬 AI Chat</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/monitoring" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>📈 System Monitoring</a></li>
+              <li style={{marginBottom: '10px'}}><a href="/settings" style={{color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block'}}>⚙️ Settings</a></li>
             </ul>
           </nav>
           <main style={{flex: 1, padding: '20px'}}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/sessions" element={<AgentSessions />} />
+              <Route path="/documents" element={<Documents />} />
+              <Route path="/search" element={<VectorSearch />} />
+              <Route path="/graph" element={<KnowledgeGraph />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/monitoring" element={<SystemMonitoring />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
         </div>

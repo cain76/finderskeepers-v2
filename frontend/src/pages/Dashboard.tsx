@@ -90,8 +90,8 @@ export default function Dashboard() {
 
       // Load system health
       const healthResponse = await apiService.getSystemHealth();
-      if (healthResponse.success && healthResponse.data) {
-        setSystemHealth(healthResponse.data);
+      if (healthResponse && healthResponse.status) {
+        setSystemHealth(healthResponse);
       }
 
       // Load session stats
@@ -346,17 +346,17 @@ export default function Dashboard() {
                         {service.toUpperCase()}
                       </Typography>
                       <Chip
-                        label={status.status}
-                        color={getServiceStatusColor(status.status)}
+                        label={typeof status === 'string' ? status : status.status || 'unknown'}
+                        color={getServiceStatusColor(typeof status === 'string' ? status : status.status || 'unknown')}
                         size="small"
                         sx={{ mb: 1 }}
                       />
-                      {status.response_time_ms && (
+                      {typeof status === 'object' && status.response_time_ms && (
                         <Typography variant="body2" color="textSecondary">
                           {formatResponseTime(status.response_time_ms)}
                         </Typography>
                       )}
-                      {status.uptime_percentage && (
+                      {typeof status === 'object' && status.uptime_percentage && (
                         <Typography variant="body2" color="textSecondary">
                           {formatUptime(status.uptime_percentage)} uptime
                         </Typography>

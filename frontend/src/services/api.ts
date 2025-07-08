@@ -16,7 +16,7 @@ class ApiService {
   private baseUrl: string;
   private controller: AbortController;
 
-  constructor(baseUrl = '/api') {
+  constructor(baseUrl = 'http://localhost:8000') {
     this.baseUrl = baseUrl;
     this.controller = new AbortController();
   }

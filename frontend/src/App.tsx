@@ -3,7 +3,10 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
 import AppLayout from '@/components/layout/AppLayout_simple';
-import Dashboard from '@/pages/Dashboard_simple';
+import Dashboard from '@/pages/Dashboard';
+import Documents from '@/pages/Documents';
+import VectorSearch from '@/pages/VectorSearch';
+import KnowledgeGraph from '@/pages/KnowledgeGraph';
 
 const theme = createTheme({
   palette: {
@@ -55,9 +58,9 @@ function App() {
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="sessions" element={<div>Agent Sessions Page</div>} />
-            <Route path="documents" element={<div>Documents Page</div>} />
-            <Route path="search" element={<div>Vector Search Page</div>} />
-            <Route path="graph" element={<div>Knowledge Graph Page</div>} />
+            <Route path="documents" element={<Documents />} />
+            <Route path="search" element={<VectorSearch />} />
+            <Route path="graph" element={<KnowledgeGraph />} />
             <Route path="monitoring" element={<div>System Monitoring Page</div>} />
             <Route path="settings" element={<div>Settings Page</div>} />
           </Route>

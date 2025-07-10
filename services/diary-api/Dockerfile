@@ -1,5 +1,15 @@
-# Use FastAPI official image that includes uvicorn
-FROM tiangolo/uvicorn-gunicorn-fastapi:python3.11
+# Use Python 3.12 official image
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
 
 # Copy requirements file first
 COPY requirements.txt /app/
@@ -21,3 +31,9 @@ COPY . /app
 # Set environment variables for GPU access
 ENV CUDA_VISIBLE_DEVICES=0
 ENV NVIDIA_VISIBLE_DEVICES=0
+
+# Expose port
+EXPOSE 80
+
+# Run with uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]

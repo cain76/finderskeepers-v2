@@ -1,88 +1,23 @@
-# FindersKeepers v2 FastAPI Backend - Production UV Build
-# Multi-stage build for optimized production image
+# Use FastAPI official image that includes uvicorn
+FROM tiangolo/uvicorn-gunicorn-fastapi:python3.11
 
-# Docker authentication arguments
-ARG DOCKER_USERNAME
-ARG DOCKER_TOKEN
+# Copy requirements file first
+COPY requirements.txt /app/
 
-FROM python:3.11-slim AS builder
+# Install PyTorch with CUDA support first (CPU version for compatibility)
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-# Install system dependencies for python-magic and build tools
-RUN apt-get update && apt-get install -y \
-    libmagic1 \
-    libmagic-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Install dependencies using requirements file
+RUN pip install -r /app/requirements.txt
 
-# Install uv - pinned version for reproducibility
-COPY --from=ghcr.io/astral-sh/uv:0.7.15 /uv /uvx /bin/
-
-# Set environment variables for UV optimization
-ENV UV_COMPILE_BYTECODE=1
-ENV UV_LINK_MODE=copy
-ENV UV_NO_INSTALLER_METADATA=1
-
-# Set work directory
-WORKDIR /app
-
-# Copy UV project files first (for Docker layer caching)
-COPY pyproject.toml uv.lock* ./
-
-# Install dependencies with cache optimization
-RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ -f uv.lock ]; then \
-        uv sync --locked --no-install-project --no-editable; \
-    else \
-        uv sync --no-install-project --no-editable; \
-    fi && \
-    # Remove opencv-python to avoid conflicts with opencv-python-headless \
-    uv pip uninstall opencv-python || true
+# Install additional dependencies not in requirements
+RUN pip install \
+    python-magic \
+    websockets
 
 # Copy application code
-COPY . .
+COPY . /app
 
-# Install the project itself (skip for FastAPI apps that don't need packaging)
-# RUN --mount=type=cache,target=/root/.cache/uv \
-#     if [ -f uv.lock ]; then \
-#         uv sync --locked --no-editable; \
-#     else \
-#         uv sync --no-editable; \
-#     fi
-
-# Production stage - smaller final image
-FROM python:3.11-slim
-
-# Install runtime dependencies (complete list for EasyOCR + OpenCV)
-RUN apt-get update && apt-get install -y \
-    libmagic1 \
-    libglib2.0-0 \
-    libgl1-mesa-glx \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Pass authentication args to production stage
-ARG DOCKER_USERNAME
-ARG DOCKER_TOKEN
-
-# Set production environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Set work directory
-WORKDIR /app
-
-# Copy the virtual environment from builder stage (no source code needed)
-COPY --from=builder /app/.venv /app/.venv
-
-# Copy application code
-COPY . .
-
-# Expose port
-EXPOSE 80
-
-# Start command using uvicorn (reliable approach)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+# Set environment variables for GPU access
+ENV CUDA_VISIBLE_DEVICES=0
+ENV NVIDIA_VISIBLE_DEVICES=0

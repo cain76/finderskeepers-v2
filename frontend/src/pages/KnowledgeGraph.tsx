@@ -37,8 +37,8 @@ import {
 } from '@xyflow/react';
 import type { Node, Edge, NodeTypes } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { apiService } from '@/services/api';
-import type { GraphNode, GraphEdge } from '@/types';
+import { neo4jService } from '../services/neo4jService';
+import type { Neo4jNode, Neo4jRelationship } from '../services/neo4jService';
 
 interface KnowledgeGraphNode extends Node {
   data: {
@@ -135,7 +135,7 @@ export default function KnowledgeGraph() {
   const [loading, setLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedNodeType, setSelectedNodeType] = React.useState('all');
-  const [selectedNode, setSelectedNode] = React.useState<GraphNode | null>(null);
+  const [selectedNode, setSelectedNode] = React.useState<Neo4jNode | null>(null);
   const [graphStats, setGraphStats] = React.useState({
     totalNodes: 0,
     totalEdges: 0,
@@ -150,43 +150,43 @@ export default function KnowledgeGraph() {
     try {
       setLoading(true);
       
-      // Load nodes
-      const nodesResponse = await apiService.getGraphNodes({
-        type: selectedNodeType !== 'all' ? selectedNodeType : undefined,
-        limit: 100,
-      });
+      // Load graph data from Neo4j
+      const graphData = await neo4jService.getGraphData(100);
+      
+      if (graphData.nodes && graphData.relationships) {
+        // Convert Neo4j data to React Flow format
+        const flowNodes: KnowledgeGraphNode[] = graphData.nodes.map((node: Neo4jNode) => {
+          const nodeType = node.labels.includes('Document') ? 'document' : 
+                          node.labels.includes('Session') ? 'session' : 
+                          node.labels.includes('Project') ? 'project' : 'entity';
+          
+          return {
+            id: node.id,
+            type: nodeType,
+            position: {
+              x: Math.random() * 600,
+              y: Math.random() * 400,
+            },
+            data: {
+              label: node.properties.title || node.properties.name || node.properties.session_id || `${nodeType}_${node.id}`,
+              type: nodeType,
+              properties: node.properties,
+              size: 1, // We could calculate this based on relationship count
+            },
+          };
+        });
 
-      // Load edges
-      const edgesResponse = await apiService.getGraphEdges();
-
-      if (nodesResponse.data && edgesResponse.data) {
-        // Convert API data to React Flow format
-        const flowNodes: KnowledgeGraphNode[] = nodesResponse.data.map((node: GraphNode) => ({
-          id: node.id,
-          type: node.type,
-          position: {
-            x: Math.random() * 600,
-            y: Math.random() * 400,
-          },
-          data: {
-            label: node.name || node.title || `${node.type}_${node.id}`,
-            type: node.type,
-            properties: node.properties || {},
-            size: node.connections || 1,
-          },
-        }));
-
-        const flowEdges: KnowledgeGraphEdge[] = edgesResponse.data.map((edge: GraphEdge) => ({
-          id: `${edge.source}-${edge.target}`,
-          source: edge.source,
-          target: edge.target,
+        const flowEdges: KnowledgeGraphEdge[] = graphData.relationships.map((rel: Neo4jRelationship) => ({
+          id: rel.id,
+          source: rel.startNode,
+          target: rel.endNode,
           type: 'default',
-          animated: edge.relationship === 'CONTAINS' || edge.relationship === 'RELATES_TO',
+          animated: rel.type === 'CONTAINS' || rel.type === 'RELATES_TO',
           data: {
-            relationship: edge.relationship,
-            properties: edge.properties || {},
+            relationship: rel.type,
+            properties: rel.properties,
           },
-          label: edge.relationship,
+          label: rel.type,
         }));
 
         setNodes(flowNodes);
@@ -299,54 +299,95 @@ export default function KnowledgeGraph() {
 
     try {
       setLoading(true);
-      const response = await apiService.queryKnowledgeGraph(searchQuery);
       
-      if (response.data) {
+      // Search documents using Neo4j service
+      const searchResults = await neo4jService.searchDocuments(searchQuery, 20);
+      
+      if (searchResults.length > 0) {
         // Convert search results to graph format
-        const searchNodes = response.data.nodes.map((node: GraphNode) => ({
-          id: node.id,
-          type: node.type,
+        const searchNodes: KnowledgeGraphNode[] = searchResults.map((doc: any) => ({
+          id: doc.id,
+          type: 'document',
           position: {
             x: Math.random() * 600,
             y: Math.random() * 400,
           },
           data: {
-            label: node.name || node.title || `${node.type}_${node.id}`,
-            type: node.type,
-            properties: node.properties || {},
-            size: node.connections || 1,
+            label: doc.title || `Document ${doc.id}`,
+            type: 'document',
+            properties: {
+              title: doc.title,
+              content: doc.content,
+              project: doc.project,
+              docType: doc.docType,
+              createdAt: doc.createdAt,
+            },
+            size: 1,
           },
         }));
 
-        const searchEdges = response.data.edges.map((edge: GraphEdge) => ({
-          id: `${edge.source}-${edge.target}`,
-          source: edge.source,
-          target: edge.target,
-          type: 'default',
-          data: {
-            relationship: edge.relationship,
-            properties: edge.properties || {},
-          },
-          label: edge.relationship,
-        }));
+        // Get relationships for search results
+        const searchEdges: KnowledgeGraphEdge[] = [];
+        for (const doc of searchResults.slice(0, 5)) { // Limit to first 5 for performance
+          try {
+            const relationshipData = await neo4jService.getDocumentRelationships(doc.id);
+            relationshipData.relationships.forEach((rel: Neo4jRelationship) => {
+              searchEdges.push({
+                id: rel.id,
+                source: rel.startNode,
+                target: rel.endNode,
+                type: 'default',
+                animated: rel.type === 'CONTAINS' || rel.type === 'RELATES_TO',
+                data: {
+                  relationship: rel.type,
+                  properties: rel.properties,
+                },
+                label: rel.type,
+              });
+            });
+          } catch (relError) {
+            console.warn('Failed to load relationships for document:', doc.id, relError);
+          }
+        }
 
         setNodes(searchNodes);
         setEdges(searchEdges);
+        
+        // Update stats
+        setGraphStats({
+          totalNodes: searchNodes.length,
+          totalEdges: searchEdges.length,
+          nodeTypes: { document: searchNodes.length },
+        });
+      } else {
+        // No search results found
+        setNodes([]);
+        setEdges([]);
+        setGraphStats({
+          totalNodes: 0,
+          totalEdges: 0,
+          nodeTypes: {},
+        });
       }
     } catch (error) {
       console.error('Search failed:', error);
+      
+      // Fallback to full graph data on search error
+      loadGraphData();
     } finally {
       setLoading(false);
     }
   };
 
   const handleNodeClick = (_event: React.MouseEvent, node: Node) => {
-    const graphNode: GraphNode = {
+    const graphNode: Neo4jNode = {
       id: node.id,
-      type: (node.data?.type as GraphNode['type']) || 'entity',
-      name: (node.data?.label as string) || node.id,
-      properties: (node.data?.properties as Record<string, any>) || {},
-      connections: (node.data?.size as number) || 0,
+      labels: [node.data?.type || 'entity'],
+      properties: {
+        name: (node.data?.label as string) || node.id,
+        title: (node.data?.label as string) || node.id,
+        ...(node.data?.properties as Record<string, any>) || {},
+      },
     };
     setSelectedNode(graphNode);
   };
@@ -482,21 +523,32 @@ export default function KnowledgeGraph() {
             
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2">Name</Typography>
-              <Typography variant="body2">{selectedNode.name}</Typography>
+              <Typography variant="body2">
+                {selectedNode.properties.name || selectedNode.properties.title || selectedNode.id}
+              </Typography>
             </Box>
 
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2">Type</Typography>
               <Chip
-                label={selectedNode.type}
-                color={getNodeTypeColor(selectedNode.type)}
+                label={selectedNode.labels[0] || 'entity'}
+                color={getNodeTypeColor(selectedNode.labels[0] || 'entity')}
                 size="small"
               />
             </Box>
 
             <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2">Connections</Typography>
-              <Typography variant="body2">{selectedNode.connections || 0}</Typography>
+              <Typography variant="subtitle2">Labels</Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {selectedNode.labels.map((label, index) => (
+                  <Chip
+                    key={index}
+                    label={label}
+                    size="small"
+                    variant="outlined"
+                  />
+                ))}
+              </Box>
             </Box>
 
             {selectedNode.properties && Object.keys(selectedNode.properties).length > 0 && (
@@ -508,6 +560,14 @@ export default function KnowledgeGraph() {
                       <ListItemText
                         primary={key}
                         secondary={String(value)}
+                        secondaryTypographyProps={{
+                          sx: { 
+                            maxWidth: '200px', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }
+                        }}
                       />
                     </ListItem>
                   ))}
@@ -520,7 +580,7 @@ export default function KnowledgeGraph() {
               variant="outlined"
               startIcon={<ViewIcon />}
               onClick={() => {
-                // Navigate to detailed view
+                // Navigate to detailed view or explore relationships
                 console.log('View details for:', selectedNode);
               }}
             >

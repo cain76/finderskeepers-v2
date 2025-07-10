@@ -106,6 +106,8 @@ services:
       - POSTGRES_USER=finderskeepers
       - POSTGRES_PASSWORD=fk2025secure
       - PGDATA=/var/lib/postgresql/data/pgdata
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command: >
@@ -113,6 +115,13 @@ services:
                -c log_destination=stderr 
                -c log_statement=all 
                -c log_min_duration_statement=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - finderskeepers_network
 
@@ -127,10 +136,12 @@ services:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=INFO
-      # Performance optimization (CPU-optimized until CUDA image available)
+      # GPU acceleration for vector operations
       - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=32
       - QDRANT__SERVICE__MAX_WORKERS=8
       - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=8
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - qdrant_data:/qdrant/storage
     deploy:
@@ -138,6 +149,11 @@ services:
         limits:
           memory: 2G
           cpus: '4'
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - finderskeepers_network
 
@@ -159,9 +175,18 @@ services:
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=2G
       - NEO4J_dbms_memory_pagecache_size=512m
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - finderskeepers_network
 
@@ -204,6 +229,66 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    networks:
+      - finderskeepers_network
+
+  # ========================================
+  # REACT FRONTEND (Vite Development Server)
+  # ========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fk2_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+      - VITE_NEO4J_URI=bolt://localhost:7687
+      - VITE_NEO4J_USER=neo4j
+      - VITE_NEO4J_PASSWORD=fk2025neo4j
+      - VITE_QDRANT_URL=http://localhost:6333
+      - CHOKIDAR_USEPOLLING=true  # For hot reload in Docker
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Anonymous volume for node_modules
+    depends_on:
+      - fastapi
+      - neo4j
+    networks:
+      - finderskeepers_network
+
+  # ========================================
+  # MCP N8N - Model Context Protocol Integration
+  # ========================================
+  mcp-n8n:
+    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    container_name: fk2_mcp_n8n
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - fastapi
     networks:
       - finderskeepers_network
 

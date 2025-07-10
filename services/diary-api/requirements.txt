@@ -8,7 +8,7 @@ uvicorn[standard]>=0.24.0
 asyncpg>=0.29.0          # PostgreSQL async driver
 pgvector>=0.2.0          # pgvector support for PostgreSQL
 neo4j>=5.15.0            # Neo4j graph database
-aioredis>=2.0.1          # Redis async client
+redis>=5.0.0             # Redis async client (includes aioredis)
 qdrant-client>=1.7.0     # Qdrant vector database
 
 # Data Processing
@@ -20,6 +20,10 @@ python-multipart>=0.0.6  # File upload support
 openai>=1.6.0            # OpenAI API
 google-generativeai>=0.3.0  # Google Gemini API
 anthropic>=0.8.0         # Anthropic Claude API
+torch>=2.1.0             # PyTorch for GPU acceleration
+transformers>=4.36.0     # Hugging Face transformers
+accelerate>=0.25.0       # GPU acceleration utilities
+sentence-transformers>=2.2.0  # Sentence embeddings
 
 # Utilities
 python-dotenv>=1.0.0     # Environment variables

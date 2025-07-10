@@ -8,7 +8,7 @@ import logging
 from typing import Optional, Dict, Any
 import asyncpg
 from neo4j import AsyncGraphDatabase
-import aioredis
+import redis.asyncio as aioredis
 from qdrant_client import QdrantClient
 from qdrant_client.http.exceptions import ResponseHandlingException
 import os
@@ -25,9 +25,9 @@ class DatabaseManager:
         self.redis_client: Optional[aioredis.Redis] = None
         self.qdrant_client: Optional[QdrantClient] = None
         
-        # Configuration from environment
+        # Configuration from environment - use Docker service names
         self.postgres_config = {
-            'host': os.getenv('POSTGRES_HOST', 'localhost'),
+            'host': os.getenv('POSTGRES_HOST', 'fk2_postgres'),
             'port': int(os.getenv('POSTGRES_PORT', '5432')),
             'database': os.getenv('POSTGRES_DB', 'finderskeepers_v2'),
             'user': os.getenv('POSTGRES_USER', 'finderskeepers'),
@@ -35,19 +35,19 @@ class DatabaseManager:
         }
         
         self.neo4j_config = {
-            'uri': os.getenv('NEO4J_URI', 'bolt://localhost:7687'),
+            'uri': os.getenv('NEO4J_URI', 'bolt://fk2_neo4j:7687'),
             'username': os.getenv('NEO4J_USERNAME', 'neo4j'),
             'password': os.getenv('NEO4J_PASSWORD', 'fk2025neo4j'),
         }
         
         self.redis_config = {
-            'host': os.getenv('REDIS_HOST', 'localhost'),
+            'host': os.getenv('REDIS_HOST', 'fk2_redis'),
             'port': int(os.getenv('REDIS_PORT', '6379')),
             'db': int(os.getenv('REDIS_DB', '0')),
         }
         
         self.qdrant_config = {
-            'host': os.getenv('QDRANT_HOST', 'localhost'),
+            'host': os.getenv('QDRANT_HOST', 'fk2_qdrant'),
             'port': int(os.getenv('QDRANT_PORT', '6333')),
         }
     
@@ -217,8 +217,8 @@ class DatabaseManager:
                 health_status['details']['postgres'] = {
                     'status': 'healthy',
                     'timestamp': result.isoformat(),
-                    'pool_size': self.postgres_pool.get_size(),
-                    'pool_free': self.postgres_pool.get_size() - self.postgres_pool.get_busy_size()
+                    'pool_size': self.postgres_pool.get_size() if hasattr(self.postgres_pool, 'get_size') else 'unknown',
+                    'pool_free': 'unknown'
                 }
         except Exception as e:
             health_status['details']['postgres'] = {

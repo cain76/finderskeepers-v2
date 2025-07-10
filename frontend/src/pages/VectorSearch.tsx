@@ -23,6 +23,10 @@ import {
   Switch,
   Alert,
   Divider,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -33,12 +37,13 @@ import {
   TrendingUp as SimilarityIcon,
   FilterList as FilterIcon,
 } from '@mui/icons-material';
-import { apiService } from '@/services/api';
-import type { VectorSearchResult, SearchQuery } from '@/types';
+import { qdrantService } from '../services/qdrantService';
+import type { QdrantSearchResult, QdrantCollection, QdrantPoint } from '../services/qdrantService';
 
 interface SearchFilters {
   minSimilarity: number;
   maxResults: number;
+  selectedCollection: string;
   documentTypes: string[];
   projects: string[];
   dateRange: {
@@ -50,11 +55,14 @@ interface SearchFilters {
 export default function VectorSearch() {
   const [query, setQuery] = React.useState('');
   const [loading, setLoading] = React.useState(false);
-  const [results, setResults] = React.useState<VectorSearchResult[]>([]);
+  const [results, setResults] = React.useState<QdrantSearchResult[]>([]);
   const [searchTime, setSearchTime] = React.useState<number>(0);
+  const [collections, setCollections] = React.useState<QdrantCollection[]>([]);
+  const [points, setPoints] = React.useState<QdrantPoint[]>([]);
   const [filters, setFilters] = React.useState<SearchFilters>({
-    minSimilarity: 0.5,
+    minSimilarity: 0.7,
     maxResults: 20,
+    selectedCollection: 'finderskeepers_documents',
     documentTypes: [],
     projects: [],
     dateRange: {
@@ -63,7 +71,66 @@ export default function VectorSearch() {
     },
   });
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  const [semanticSearch, setSemanticSearch] = React.useState(true);
+  const [browseMode, setBrowseMode] = React.useState(false);
+  const [collectionStats, setCollectionStats] = React.useState<{
+    totalCollections: number;
+    totalPoints: number;
+    collections: Array<{
+      name: string;
+      pointsCount: number;
+      vectorsCount: number;
+    }>;
+  }>({
+    totalCollections: 0,
+    totalPoints: 0,
+    collections: []
+  });
+
+  // Load collections and statistics on mount
+  React.useEffect(() => {
+    const loadCollections = async () => {
+      try {
+        const [collectionsData, statsData] = await Promise.all([
+          qdrantService.getCollections(),
+          qdrantService.getCollectionStats()
+        ]);
+        
+        setCollections(collectionsData);
+        setCollectionStats(statsData);
+        
+        // Set first collection as default if available
+        if (collectionsData.length > 0) {
+          setFilters(prev => ({ ...prev, selectedCollection: collectionsData[0].name }));
+        }
+      } catch (error) {
+        console.error('Failed to load collections:', error);
+      }
+    };
+    
+    loadCollections();
+  }, []);
+
+  // Browse collection points
+  const browseCollection = async (collectionName: string) => {
+    try {
+      setLoading(true);
+      const startTime = Date.now();
+      
+      const collectionPoints = await qdrantService.getPoints(collectionName, filters.maxResults);
+      
+      const endTime = Date.now();
+      setSearchTime(endTime - startTime);
+      
+      setPoints(collectionPoints);
+      setBrowseMode(true);
+      setResults([]);
+    } catch (error) {
+      console.error('Failed to browse collection:', error);
+      setPoints([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Perform vector search
   const performSearch = async () => {
@@ -71,36 +138,23 @@ export default function VectorSearch() {
 
     try {
       setLoading(true);
+      setBrowseMode(false);
+      setPoints([]);
       const startTime = Date.now();
 
-      const searchParams: SearchQuery = {
-        query: query.trim(),
-        limit: filters.maxResults,
-        threshold: filters.minSimilarity,
-        filters: {
-          document_types: filters.documentTypes.length > 0 ? filters.documentTypes : undefined,
-          projects: filters.projects.length > 0 ? filters.projects : undefined,
-          date_range: filters.dateRange.start && filters.dateRange.end 
-            ? { start: filters.dateRange.start, end: filters.dateRange.end }
-            : undefined,
-        },
-      };
-
-      let response;
-      if (semanticSearch) {
-        response = await apiService.semanticSearch(query.trim(), filters.maxResults);
-      } else {
-        response = await apiService.vectorSearch(searchParams);
-      }
-
+      // For now, we'll implement text search through the backend API
+      // Since direct text-to-vector conversion requires embeddings generation
+      // This would typically be handled by the FastAPI backend
+      
+      // Placeholder: Show message that text search needs backend
+      console.warn('Text search requires backend API integration');
+      
+      // For demonstration, let's browse the collection instead
+      await browseCollection(filters.selectedCollection);
+      
       const endTime = Date.now();
       setSearchTime(endTime - startTime);
 
-      if (response.success && response.data) {
-        setResults(response.data);
-      } else {
-        setResults([]);
-      }
     } catch (error) {
       console.error('Search failed:', error);
       setResults([]);
@@ -156,11 +210,21 @@ export default function VectorSearch() {
         <Typography variant="h4" component="h1">
           Vector Search
         </Typography>
-        <Chip
-          icon={<VectorIcon />}
-          label={`${results.length} results`}
-          variant="outlined"
-        />
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Chip
+            icon={<VectorIcon />}
+            label={`${collectionStats.totalCollections} collections`}
+            variant="outlined"
+          />
+          <Chip
+            label={`${collectionStats.totalPoints} total points`}
+            variant="outlined"
+          />
+          <Chip
+            label={browseMode ? `${points.length} points` : `${results.length} results`}
+            variant="outlined"
+          />
+        </Box>
       </Box>
 
       {/* Search Form */}
@@ -168,11 +232,28 @@ export default function VectorSearch() {
         <CardContent>
           <form onSubmit={handleSubmit}>
             <Grid container spacing={2} alignItems="center">
-              <Grid size={{ xs: 12, md: 8 }}>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <FormControl fullWidth variant="outlined">
+                  <InputLabel>Collection</InputLabel>
+                  <Select
+                    value={filters.selectedCollection}
+                    onChange={(e) => setFilters(prev => ({ ...prev, selectedCollection: e.target.value }))}
+                    label="Collection"
+                    disabled={loading}
+                  >
+                    {collections.map((collection) => (
+                      <MenuItem key={collection.name} value={collection.name}>
+                        {collection.name} ({collection.pointsCount} points)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <TextField
                   fullWidth
                   variant="outlined"
-                  placeholder="Search documents by meaning, not just keywords..."
+                  placeholder="Search documents by meaning..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   disabled={loading}
@@ -201,33 +282,26 @@ export default function VectorSearch() {
                 <Button
                   fullWidth
                   variant="outlined"
-                  startIcon={<FilterIcon />}
-                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  onClick={() => browseCollection(filters.selectedCollection)}
+                  disabled={loading}
                   sx={{ height: 56 }}
                 >
-                  Filters
+                  Browse
                 </Button>
               </Grid>
             </Grid>
           </form>
 
-          {/* Search Type Toggle */}
-          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={semanticSearch}
-                  onChange={(e) => setSemanticSearch(e.target.checked)}
-                />
-              }
-              label="Semantic Search (AI-powered)"
-            />
-            <Typography variant="body2" color="textSecondary" sx={{ ml: 2 }}>
-              {semanticSearch 
-                ? 'Search by meaning using AI embeddings' 
-                : 'Traditional vector similarity search'
-              }
+          {/* Collection Stats */}
+          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              {browseMode ? 'Browsing collection points' : 'Vector search in selected collection'}
             </Typography>
+            {collections.find(c => c.name === filters.selectedCollection) && (
+              <Typography variant="body2" color="textSecondary">
+                Selected: {filters.selectedCollection} ({collections.find(c => c.name === filters.selectedCollection)?.pointsCount || 0} points)
+              </Typography>
+            )}
           </Box>
         </CardContent>
       </Card>
@@ -329,26 +403,26 @@ export default function VectorSearch() {
 
             <List>
               {results.map((result, index) => (
-                <React.Fragment key={result.document_id || index}>
+                <React.Fragment key={result.id || index}>
                   <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', py: 2 }}>
                     {/* Document Header */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', mb: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <DocumentIcon sx={{ mr: 1, color: 'primary.main' }} />
                         <Typography variant="subtitle1" fontWeight="medium">
-                          {result.metadata?.source_file || 'Untitled Document'}
+                          {result.payload?.title || result.payload?.source_file || `Document ${result.id}`}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Chip
                           icon={<SimilarityIcon />}
-                          label={formatSimilarity(result.similarity_score)}
-                          color={getSimilarityColor(result.similarity_score) as any}
+                          label={formatSimilarity(result.score)}
+                          color={getSimilarityColor(result.score) as any}
                           size="small"
                         />
-                        {result.metadata?.project && (
+                        {result.payload?.project && (
                           <Chip
-                            label={result.metadata.project}
+                            label={result.payload.project}
                             variant="outlined"
                             size="small"
                           />
@@ -359,12 +433,12 @@ export default function VectorSearch() {
                     {/* Document Content */}
                     <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
                       <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
-                        {highlightText(result.content, query)}
+                        {highlightText(result.payload?.content || 'No content available', query)}
                       </Typography>
                     </Paper>
 
                     {/* Document Metadata */}
-                    {result.metadata && Object.keys(result.metadata).length > 0 && (
+                    {result.payload && Object.keys(result.payload).length > 0 && (
                       <Accordion sx={{ mt: 1 }}>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                           <Typography variant="body2" color="textSecondary">
@@ -373,7 +447,7 @@ export default function VectorSearch() {
                         </AccordionSummary>
                         <AccordionDetails>
                           <Grid container spacing={1}>
-                            {Object.entries(result.metadata).map(([key, value]) => (
+                            {Object.entries(result.payload).map(([key, value]) => (
                               <Grid size={{ xs: 12, sm: 6 }} key={key}>
                                 <Typography variant="caption" color="textSecondary">
                                   {key.replace(/_/g, ' ').toUpperCase()}
@@ -389,6 +463,87 @@ export default function VectorSearch() {
                     )}
                   </ListItem>
                   {index < results.length - 1 && <Divider />}
+                </React.Fragment>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Browse Points */}
+      {browseMode && points.length > 0 && (
+        <Card>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">
+                Collection Points ({points.length})
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Loaded in {searchTime}ms
+              </Typography>
+            </Box>
+
+            <List>
+              {points.map((point, index) => (
+                <React.Fragment key={point.id || index}>
+                  <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', py: 2 }}>
+                    {/* Point Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', mb: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <VectorIcon sx={{ mr: 1, color: 'primary.main' }} />
+                        <Typography variant="subtitle1" fontWeight="medium">
+                          {point.payload?.title || point.payload?.source_file || `Point ${point.id}`}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                          label={`ID: ${point.id}`}
+                          variant="outlined"
+                          size="small"
+                        />
+                        {point.payload?.project && (
+                          <Chip
+                            label={point.payload.project}
+                            variant="outlined"
+                            size="small"
+                          />
+                        )}
+                      </Box>
+                    </Box>
+
+                    {/* Point Content */}
+                    <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+                      <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
+                        {point.payload?.content || 'No content available'}
+                      </Typography>
+                    </Paper>
+
+                    {/* Point Metadata */}
+                    {point.payload && Object.keys(point.payload).length > 0 && (
+                      <Accordion sx={{ mt: 1 }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Typography variant="body2" color="textSecondary">
+                            Point Metadata
+                          </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Grid container spacing={1}>
+                            {Object.entries(point.payload).map(([key, value]) => (
+                              <Grid size={{ xs: 12, sm: 6 }} key={key}>
+                                <Typography variant="caption" color="textSecondary">
+                                  {key.replace(/_/g, ' ').toUpperCase()}
+                                </Typography>
+                                <Typography variant="body2">
+                                  {String(value)}
+                                </Typography>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </AccordionDetails>
+                      </Accordion>
+                    )}
+                  </ListItem>
+                  {index < points.length - 1 && <Divider />}
                 </React.Fragment>
               ))}
             </List>

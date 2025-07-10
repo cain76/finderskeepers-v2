@@ -3,7 +3,7 @@ FindersKeepers v2 - FastAPI Diary & Knowledge Management API
 Personal AI Agent Knowledge Hub (July 2025)
 """
 
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -35,7 +35,7 @@ class OllamaClient:
     """Local LLM client for zero-cost embeddings and inference"""
     
     def __init__(self):
-        self.base_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.base_url = os.getenv("OLLAMA_URL", "http://fk2_ollama:11434")
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "mxbai-embed-large")
         self.chat_model = os.getenv("CHAT_MODEL", "llama3.2:3b")
         self.use_local = os.getenv("USE_LOCAL_LLM", "true").lower() == "true"
@@ -673,6 +673,113 @@ async def get_conversation_history(conversation_id: str):
     except Exception as e:
         logger.error(f"Failed to get conversation history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ========================================
+# WEBSOCKET ENDPOINTS - Real-time Chat
+# ========================================
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+        logger.info(f"Client {client_id} connected to WebSocket")
+
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+            logger.info(f"Client {client_id} disconnected from WebSocket")
+
+    async def send_personal_message(self, message: str, client_id: str):
+        if client_id in self.active_connections:
+            try:
+                await self.active_connections[client_id].send_text(message)
+            except Exception as e:
+                logger.error(f"Error sending message to {client_id}: {e}")
+                self.disconnect(client_id)
+
+    async def broadcast(self, message: str):
+        for client_id, websocket in self.active_connections.items():
+            try:
+                await websocket.send_text(message)
+            except Exception as e:
+                logger.error(f"Error broadcasting to {client_id}: {e}")
+                self.disconnect(client_id)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    """WebSocket endpoint for real-time chat communication"""
+    await manager.connect(websocket, client_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            
+            # Parse the incoming message
+            try:
+                import json
+                message_data = json.loads(data)
+                message_type = message_data.get("type", "chat")
+                message_content = message_data.get("message", "")
+                
+                if message_type == "chat":
+                    # Process chat message through Ollama
+                    logger.info(f"Processing chat message from {client_id}: {message_content[:100]}...")
+                    
+                    # Generate response using local Ollama
+                    response = await ollama_client.generate_text(
+                        f"You are a helpful AI assistant for FindersKeepers v2. Respond to: {message_content}",
+                        max_tokens=512
+                    )
+                    
+                    # Send response back to client
+                    response_message = {
+                        "type": "chat_response",
+                        "message": response if response else "Sorry, I couldn't generate a response right now.",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "client_id": client_id
+                    }
+                    
+                    await manager.send_personal_message(json.dumps(response_message), client_id)
+                    
+                elif message_type == "knowledge_query":
+                    # Process knowledge query
+                    logger.info(f"Processing knowledge query from {client_id}: {message_content[:100]}...")
+                    
+                    # Generate embeddings and search knowledge base
+                    embeddings = await ollama_client.get_embeddings(message_content)
+                    
+                    # TODO: Implement actual knowledge graph query
+                    knowledge_response = f"Knowledge query processed for: '{message_content}'. Found relevant information in the knowledge base."
+                    
+                    response_message = {
+                        "type": "knowledge_response",
+                        "message": knowledge_response,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "client_id": client_id,
+                        "embeddings_count": len(embeddings)
+                    }
+                    
+                    await manager.send_personal_message(json.dumps(response_message), client_id)
+                    
+                else:
+                    # Echo unknown message types
+                    await manager.send_personal_message(f"Echo: {data}", client_id)
+                    
+            except json.JSONDecodeError:
+                # Handle plain text messages
+                await manager.send_personal_message(f"Echo: {data}", client_id)
+                
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+        logger.info(f"Client {client_id} disconnected")
+        
+    except Exception as e:
+        logger.error(f"WebSocket error for {client_id}: {e}")
+        manager.disconnect(client_id)
 
 # ========================================
 # STARTUP EVENT

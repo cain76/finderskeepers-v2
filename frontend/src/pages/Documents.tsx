@@ -1,4 +1,4 @@
-// FindersKeepers v2 - Documents Management Page
+// FindersKeepers v2 - Enhanced Documents Management Page
 
 import React from 'react';
 import {
@@ -34,6 +34,12 @@ import {
   Paper,
   Pagination,
   Alert,
+  Stack,
+  Tabs,
+  Tab,
+  FormControlLabel,
+  Switch,
+  CircularProgress,
 } from '@mui/material';
 import {
   Description as DocumentIcon,
@@ -50,6 +56,11 @@ import {
   PictureAsPdf as PdfIcon,
   Code as CodeIcon,
   DataObject as JsonIcon,
+  Folder as FolderIcon,
+  InsertDriveFile as FileIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Stop as StopIcon,
 } from '@mui/icons-material';
 import { apiService } from '@/services/api';
 import type { Document } from '@/types';
@@ -59,6 +70,21 @@ interface DocumentFilter {
   project?: string;
   dateRange?: string;
   tags?: string[];
+}
+
+interface UploadProgress {
+  filename: string;
+  progress: number;
+  status: 'pending' | 'uploading' | 'completed' | 'error';
+  error?: string;
+}
+
+function TabPanel({ children, value, index }: { children: React.ReactNode; value: number; index: number }) {
+  return (
+    <div role="tabpanel" hidden={value !== index}>
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
 }
 
 export default function Documents() {
@@ -76,6 +102,13 @@ export default function Documents() {
     formats: {} as Record<string, number>,
     projects: {} as Record<string, number>,
   });
+
+  // Enhanced upload state
+  const [uploadTabValue, setUploadTabValue] = React.useState(0);
+  const [includeSubfolders, setIncludeSubfolders] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState<UploadProgress[]>([]);
+  const [isUploading, setIsUploading] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     loadDocuments();
@@ -190,24 +223,111 @@ export default function Documents() {
   const handleFileUpload = async () => {
     if (!selectedFiles) return;
 
-    try {
-      setLoading(true);
+    const files = Array.from(selectedFiles);
+    setIsUploading(true);
+    setUploadProgress(files.map(file => ({
+      filename: file.name,
+      progress: 0,
+      status: 'pending' as const,
+    })));
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       
-      for (const file of Array.from(selectedFiles)) {
+      try {
+        // Update progress
+        setUploadProgress(prev => prev.map((item, index) => 
+          index === i ? { ...item, status: 'uploading' as const } : item
+        ));
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('project', 'finderskeepers-v2');
         
-        await apiService.uploadDocument(formData);
+        // Simulate progress
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => prev.map((item, index) => 
+            index === i && item.progress < 90 
+              ? { ...item, progress: item.progress + Math.random() * 20 }
+              : item
+          ));
+        }, 200);
+
+        const response = await apiService.uploadDocument(formData);
+        
+        clearInterval(progressInterval);
+        
+        setUploadProgress(prev => prev.map((item, index) => 
+          index === i ? { 
+            ...item, 
+            progress: 100, 
+            status: response.success ? 'completed' as const : 'error' as const,
+            error: response.success ? undefined : (response.message || 'Upload failed')
+          } : item
+        ));
+      } catch (error) {
+        setUploadProgress(prev => prev.map((item, index) => 
+          index === i ? { 
+            ...item, 
+            status: 'error' as const,
+            error: error instanceof Error ? error.message : 'Upload failed'
+          } : item
+        ));
       }
-      
+    }
+
+    setIsUploading(false);
+    
+    // Auto-close dialog after successful uploads
+    setTimeout(() => {
       setUploadDialogOpen(false);
       setSelectedFiles(null);
+      setUploadProgress([]);
       loadDocuments();
-    } catch (error) {
-      console.error('Failed to upload documents:', error);
-    } finally {
-      setLoading(false);
+    }, 2000);
+  };
+
+  const handleFolderUpload = async () => {
+    try {
+      // Modern browsers support directory picker
+      if ('showDirectoryPicker' in window) {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        const files: File[] = [];
+        
+        const processDirectory = async (dirHandle: any) => {
+          for await (const entry of dirHandle.values()) {
+            if (entry.kind === 'file') {
+              const file = await entry.getFile();
+              // Filter supported file types
+              const supportedTypes = ['.md', '.txt', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.ts'];
+              if (supportedTypes.some(type => file.name.toLowerCase().endsWith(type))) {
+                files.push(file);
+              }
+            } else if (entry.kind === 'directory' && includeSubfolders) {
+              await processDirectory(entry);
+            }
+          }
+        };
+        
+        await processDirectory(dirHandle);
+        
+        if (files.length > 0) {
+          // Convert to FileList-like object
+          const dt = new DataTransfer();
+          files.forEach(file => dt.items.add(file));
+          setSelectedFiles(dt.files);
+          await handleFileUpload();
+        } else {
+          alert('No supported files found in the selected folder.');
+        }
+      } else {
+        alert('Folder upload is not supported in this browser. Please use Chrome, Edge, or another modern browser.');
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Failed to select folder:', error);
+        alert('Failed to select folder. Please try again.');
+      }
     }
   };
 
@@ -254,21 +374,41 @@ export default function Documents() {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const getProgressColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'success';
+      case 'error': return 'error';
+      case 'uploading': return 'primary';
+      case 'pending': return 'info';
+      default: return 'inherit';
+    }
+  };
+
   return (
-    <Box sx={{ flexGrow: 1 }}>
+    <Box sx={{ flexGrow: 1, height: '100%', overflow: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h4" component="h1" sx={{ display: 'flex', alignItems: 'center' }}>
           <DocumentIcon sx={{ mr: 1 }} />
           Documents
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<UploadIcon />}
-          onClick={() => setUploadDialogOpen(true)}
-        >
-          Upload Documents
-        </Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          <Button
+            variant="contained"
+            startIcon={<UploadIcon />}
+            onClick={() => setUploadDialogOpen(true)}
+            disabled={isUploading}
+            size="medium"
+          >
+            Ingest Documents
+          </Button>
+          {isUploading && (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <CircularProgress size={20} sx={{ mr: 1 }} />
+              <Typography variant="body2">Processing...</Typography>
+            </Box>
+          )}
+        </Stack>
       </Box>
 
       {/* Stats Cards */}
@@ -404,8 +544,8 @@ export default function Documents() {
         <CardContent>
           {loading && <LinearProgress sx={{ mb: 2 }} />}
           
-          <TableContainer component={Paper} variant="outlined">
-            <Table>
+          <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>Document</TableCell>
@@ -487,50 +627,114 @@ export default function Documents() {
         </CardContent>
       </Card>
 
-      {/* Upload Dialog */}
+      {/* Enhanced Upload Dialog */}
       <Dialog
         open={uploadDialogOpen}
         onClose={() => setUploadDialogOpen(false)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Upload Documents</DialogTitle>
+        <DialogTitle>Document Ingestion</DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
-            <input
-              type="file"
-              multiple
-              onChange={(e) => setSelectedFiles(e.target.files)}
-              style={{ display: 'none' }}
-              id="file-upload"
-              accept=".md,.txt,.json,.pdf,.doc,.docx"
-            />
-            <label htmlFor="file-upload">
+            <Tabs value={uploadTabValue} onChange={(_, newValue) => setUploadTabValue(newValue)}>
+              <Tab icon={<FileIcon />} label="Files" />
+              <Tab icon={<FolderIcon />} label="Folder" />
+            </Tabs>
+
+            <TabPanel value={uploadTabValue} index={0}>
+              <input
+                type="file"
+                multiple
+                onChange={(e) => setSelectedFiles(e.target.files)}
+                style={{ display: 'none' }}
+                id="file-upload"
+                accept=".md,.txt,.json,.pdf,.doc,.docx,.py,.js,.ts,.html,.css"
+                ref={fileInputRef}
+              />
+              <label htmlFor="file-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<CloudUploadIcon />}
+                  fullWidth
+                  sx={{ mb: 2 }}
+                >
+                  Choose Files
+                </Button>
+              </label>
+              
+              {selectedFiles && (
+                <List dense>
+                  {Array.from(selectedFiles).map((file, index) => (
+                    <ListItem key={index}>
+                      <ListItemIcon>
+                        {getFileIcon(file.name.split('.').pop() || '')}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={file.name}
+                        secondary={formatFileSize(file.size)}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </TabPanel>
+
+            <TabPanel value={uploadTabValue} index={1}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={includeSubfolders}
+                    onChange={(e) => setIncludeSubfolders(e.target.checked)}
+                  />
+                }
+                label="Include subfolders"
+                sx={{ mb: 2 }}
+              />
               <Button
                 variant="outlined"
-                component="span"
-                startIcon={<CloudUploadIcon />}
+                startIcon={<FolderIcon />}
+                onClick={handleFolderUpload}
                 fullWidth
-                sx={{ mb: 2 }}
               >
-                Choose Files
+                Select Folder
               </Button>
-            </label>
-            
-            {selectedFiles && (
-              <List dense>
-                {Array.from(selectedFiles).map((file, index) => (
-                  <ListItem key={index}>
-                    <ListItemIcon>
-                      {getFileIcon(file.name.split('.').pop() || '')}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={file.name}
-                      secondary={formatFileSize(file.size)}
+            </TabPanel>
+
+            {/* Progress Display */}
+            {uploadProgress.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>Upload Progress</Typography>
+                {uploadProgress.map((item, index) => (
+                  <Box key={index} sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="body2" sx={{ mr: 1 }}>
+                        {item.filename}
+                      </Typography>
+                      {item.status === 'completed' && <CheckCircleIcon color="success" />}
+                      {item.status === 'error' && <ErrorIcon color="error" />}
+                      {item.status === 'uploading' && <CircularProgress size={16} />}
+                      {item.status === 'pending' && <FileIcon color="action" />}
+                    </Box>
+                    <LinearProgress 
+                      variant="determinate" 
+                      value={item.progress} 
+                      color={getProgressColor(item.status)}
                     />
-                  </ListItem>
+                    {item.status === 'error' && item.error && (
+                      <Typography variant="caption" color="error" display="block">
+                        {item.error}
+                      </Typography>
+                    )}
+                    {item.status === 'pending' && (
+                      <Typography variant="caption" color="info.main" display="block">
+                        Queued for processing
+                      </Typography>
+                    )}
+                  </Box>
                 ))}
-              </List>
+              </Box>
             )}
           </Box>
         </DialogContent>
@@ -541,9 +745,10 @@ export default function Documents() {
           <Button
             onClick={handleFileUpload}
             variant="contained"
-            disabled={!selectedFiles}
+            disabled={!selectedFiles || isUploading}
+            startIcon={isUploading ? <CircularProgress size={16} /> : <UploadIcon />}
           >
-            Upload
+            {isUploading ? 'Processing...' : 'Start Ingestion'}
           </Button>
         </DialogActions>
       </Dialog>

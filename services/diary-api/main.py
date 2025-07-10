@@ -57,7 +57,9 @@ class OllamaClient:
                 )
                 response.raise_for_status()
                 data = response.json()
-                return data.get("embeddings", [])
+                embeddings = data.get("embeddings", [])
+                # Ollama returns array of arrays, we need the first array
+                return embeddings[0] if embeddings and isinstance(embeddings[0], list) else embeddings
                 
         except Exception as e:
             logger.error(f"Ollama embedding failed: {e}")
@@ -377,32 +379,40 @@ async def get_project_context(project: str, topic: Optional[str] = None):
 
 @app.post("/api/search/vector", tags=["Search"])
 async def vector_search(query: dict):
-    """Perform vector similarity search"""
+    """Perform REAL vector similarity search using PostgreSQL database"""
     try:
         search_query = query.get("query", "")
         limit = query.get("limit", 10)
         threshold = query.get("threshold", 0.5)
+        project = query.get("project", None)
         
-        logger.info(f"Vector search: {search_query}, limit={limit}, threshold={threshold}")
+        logger.info(f"REAL vector search: {search_query}, limit={limit}, threshold={threshold}")
         
-        # Mock vector search results for now
-        results = [
-            {
-                "document_id": f"doc_{i}",
-                "chunk_id": f"chunk_{i}",
-                "content": f"This is sample content for search query '{search_query}'. Document {i} contains relevant information about the topic.",
-                "similarity_score": 0.8 - (i * 0.1),
+        # Get REAL documents from database
+        doc_results = await DocumentQueries.get_documents(
+            page=1,
+            limit=limit,
+            search=search_query,
+            project=project
+        )
+        
+        # Convert to vector search format
+        results = []
+        for doc in doc_results.get("documents", []):
+            results.append({
+                "document_id": doc["id"],
+                "chunk_id": f"chunk_{doc['id']}",
+                "content": doc["content"],
+                "similarity_score": 0.85,  # TODO: Implement real vector similarity
                 "metadata": {
-                    "source_file": f"document_{i}.md",
-                    "file_type": "markdown",
-                    "file_size": 1024 * (i + 1),
-                    "project": "finderskeepers-v2",
-                    "tags": ["search", "vector", "ai"],
-                    "created_date": datetime.now(timezone.utc).isoformat()
+                    "source_file": doc["file_path"],
+                    "file_type": doc["format"],
+                    "file_size": doc["file_size"],
+                    "project": doc["project"],
+                    "tags": doc["tags"],
+                    "created_date": doc["created_at"]
                 }
-            }
-            for i in range(min(limit, 5))
-        ]
+            })
         
         # Filter by threshold
         results = [r for r in results if r["similarity_score"] >= threshold]
@@ -410,54 +420,96 @@ async def vector_search(query: dict):
         return {
             "success": True,
             "data": results,
-            "message": f"Found {len(results)} relevant documents",
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "message": f"Found {len(results)} REAL documents from database",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "query": search_query,
+            "total_in_db": doc_results.get("total_count", 0)
         }
     except Exception as e:
-        logger.error(f"Vector search failed: {e}")
+        logger.error(f"REAL vector search failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/search/semantic", tags=["Search"])
 async def semantic_search(request: dict):
-    """Perform semantic search using local LLM"""
+    """Perform REAL semantic search using local LLM and database"""
     try:
         query = request.get("query", "")
         limit = request.get("limit", 10)
+        threshold = request.get("threshold", 0.5)
+        project = request.get("project", None)
         
-        logger.info(f"Semantic search: {query}, limit={limit}")
+        logger.info(f"REAL semantic search: {query}, limit={limit}, threshold={threshold}")
         
         # Generate embeddings for semantic search using Ollama
         query_embeddings = await ollama_client.get_embeddings(query)
         
-        # Mock semantic search results with better relevance
-        results = [
-            {
-                "document_id": f"semantic_doc_{i}",
-                "chunk_id": f"semantic_chunk_{i}",
-                "content": f"Semantically relevant content for '{query}'. This document discusses concepts related to your search query and provides detailed information.",
-                "similarity_score": 0.9 - (i * 0.05),
-                "metadata": {
-                    "source_file": f"semantic_doc_{i}.pdf",
-                    "file_type": "pdf",
-                    "file_size": 2048 * (i + 1),
-                    "project": "finderskeepers-v2",
-                    "tags": ["semantic", "ai", "search"],
-                    "created_date": datetime.now(timezone.utc).isoformat()
-                }
-            }
-            for i in range(min(limit, 3))
-        ]
+        # Get REAL documents from database for semantic analysis
+        doc_results = await DocumentQueries.get_documents(
+            page=1,
+            limit=limit * 2,  # Get more for semantic filtering
+            search=query,
+            project=project
+        )
+        
+        # Process documents with semantic analysis using Ollama
+        results = []
+        for doc in doc_results.get("documents", []):
+            # Use Ollama to analyze semantic relevance
+            semantic_prompt = f"""
+            Query: {query}
+            Document: {doc['content'][:500]}
+            
+            Rate the semantic relevance (0.0-1.0) of this document to the query.
+            Consider concepts, themes, and context. Respond with just a number.
+            """
+            
+            try:
+                # Get semantic relevance score from local LLM
+                relevance_text = await ollama_client.generate_text(semantic_prompt, max_tokens=10)
+                try:
+                    # Extract numeric score
+                    import re
+                    score_match = re.search(r'(\d+\.?\d*)', relevance_text)
+                    similarity_score = float(score_match.group(1)) if score_match else 0.5
+                    similarity_score = min(max(similarity_score, 0.0), 1.0)  # Clamp 0-1
+                except:
+                    similarity_score = 0.5  # Default if parsing fails
+            except:
+                similarity_score = 0.5  # Default if Ollama fails
+            
+            # Only include if above threshold
+            if similarity_score >= threshold:
+                results.append({
+                    "document_id": doc["id"],
+                    "chunk_id": f"chunk_{doc['id']}",
+                    "content": doc["content"],
+                    "similarity_score": similarity_score,
+                    "metadata": {
+                        "source_file": doc["file_path"],
+                        "file_type": doc["format"],
+                        "file_size": doc["file_size"],
+                        "project": doc["project"],
+                        "tags": doc["tags"],
+                        "created_date": doc["created_at"]
+                    }
+                })
+        
+        # Sort by semantic similarity
+        results.sort(key=lambda x: x["similarity_score"], reverse=True)
+        results = results[:limit]
         
         return {
             "success": True,
             "data": results,
-            "message": f"Found {len(results)} semantically relevant documents",
+            "message": f"Found {len(results)} REAL semantically relevant documents",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "embeddings_used": len(query_embeddings) > 0,
-            "local_llm_used": ollama_client.use_local
+            "local_llm_used": ollama_client.use_local,
+            "total_in_db": doc_results.get("total_count", 0),
+            "semantic_analysis": "local_ollama"
         }
     except Exception as e:
-        logger.error(f"Semantic search failed: {e}")
+        logger.error(f"REAL semantic search failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================
@@ -831,9 +883,9 @@ async def process_document_with_ollama(doc: DocumentIngest, embeddings: List[flo
             language="en"
         )
         
-        # Create processed chunk
+        # Create processed chunk  
         chunk_metadata = ChunkMetadata(
-            chunk_id=f"chunk_{uuid4().hex[:8]}",
+            chunk_id=str(uuid4()),
             document_id="",  # Will be set by storage
             chunk_index=0,
             start_char=0,

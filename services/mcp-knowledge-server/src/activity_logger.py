@@ -18,7 +18,7 @@ class ActivityLogger:
     """Logs MCP server activities to n8n workflows"""
     
     def __init__(self):
-        self.n8n_base_url = "http://localhost:5678"
+        self.fastapi_base_url = "http://localhost:8000"
         self.session_id = None
         self.agent_type = "mcp_knowledge_server"
         self.initialized = False
@@ -26,9 +26,10 @@ class ActivityLogger:
     async def initialize(self):
         """Create a new session for this MCP server instance"""
         try:
-            # Create session with n8n webhook
+            # Create session with FastAPI
             session_data = {
                 "agent_type": self.agent_type,
+                "user_id": "local_user",
                 "project": "finderskeepers_v2",
                 "context": {
                     "server": "mcp_knowledge_server",
@@ -46,20 +47,17 @@ class ActivityLogger:
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.n8n_base_url}/webhook/agent-logger",
+                    f"{self.fastapi_base_url}/api/diary/sessions",
                     json=session_data,
                     timeout=10.0
                 )
                 
                 if response.status_code == 200:
                     result = response.json()
-                    # n8n returns array with session info
-                    if isinstance(result, list) and len(result) > 0:
-                        session_info = result[0]
-                        if isinstance(session_info, dict) and "session_id" in session_info:
-                            self.session_id = session_info["session_id"]
-                    elif isinstance(result, dict) and "session_id" in result:
-                        self.session_id = result["session_id"]
+                    if isinstance(result, dict) and "data" in result:
+                        session_data = result["data"]
+                        if "session_id" in session_data:
+                            self.session_id = session_data["session_id"]
                     
                     if not self.session_id:
                         # Generate our own if not provided
@@ -106,7 +104,7 @@ class ActivityLogger:
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.n8n_base_url}/webhook/agent-actions",
+                    f"{self.fastapi_base_url}/api/diary/actions",
                     json=action_data,
                     timeout=10.0
                 )

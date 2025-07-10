@@ -274,12 +274,7 @@ services:
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - NVIDIA_VISIBLE_DEVICES=0
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
-      interval: 30s
-      timeout: 10s
-      start_period: 5s
-      retries: 3
+    # MCP server runs on stdio transport, not HTTP - removed healthcheck
     deploy:
       resources:
         reservations:

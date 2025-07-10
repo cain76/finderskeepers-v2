@@ -4,9 +4,11 @@ Replaces all mock data with actual database operations
 """
 
 import logging
+import json
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 import asyncpg
+from fastapi import HTTPException
 from .connection import db_manager
 
 logger = logging.getLogger(__name__)
@@ -427,6 +429,155 @@ class SessionQueries:
                 
         except Exception as e:
             logger.error(f"Failed to get session actions: {e}")
+            raise
+    
+    @staticmethod
+    async def create_session(
+        session_id: str,
+        agent_type: str,
+        user_id: str = "local_user",
+        project: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Create new agent session in database"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                now = datetime.now(timezone.utc)
+                
+                result = await conn.fetchrow("""
+                    INSERT INTO agent_sessions 
+                    (session_id, agent_type, user_id, project, start_time, context, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+                    RETURNING *
+                """, session_id, agent_type, user_id, project, now, json.dumps(context or {}), now, now)
+                
+                return {
+                    "id": str(result['id']),
+                    "session_id": result['session_id'],
+                    "agent_type": result['agent_type'],
+                    "user_id": result['user_id'],
+                    "project": result['project'],
+                    "session_start": result['start_time'].isoformat(),
+                    "status": "active",
+                    "context": result['context'],
+                    "created_at": result['created_at'].isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to create session: {e}")
+            raise
+    
+    @staticmethod
+    async def create_action(
+        action_id: str,
+        session_id: str,
+        action_type: str,
+        description: str,
+        details: Optional[Dict[str, Any]] = None,
+        files_affected: Optional[List[str]] = None,
+        success: bool = True
+    ) -> Dict[str, Any]:
+        """Create new agent action in database"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                now = datetime.now(timezone.utc)
+                
+                result = await conn.fetchrow("""
+                    INSERT INTO agent_actions 
+                    (action_id, session_id, timestamp, action_type, description, details, files_affected, success)
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+                    RETURNING *
+                """, action_id, session_id, now, action_type, description, json.dumps(details or {}), files_affected or [], success)
+                
+                return {
+                    "id": str(result['id']),
+                    "action_id": result['action_id'],
+                    "session_id": result['session_id'],
+                    "timestamp": result['timestamp'].isoformat(),
+                    "action_type": result['action_type'],
+                    "description": result['description'],
+                    "details": result['details'],
+                    "files_affected": result['files_affected'],
+                    "success": result['success']
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to create action: {e}")
+            raise
+    
+    @staticmethod
+    async def end_session(session_id: str) -> Dict[str, Any]:
+        """End an active session"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                now = datetime.now(timezone.utc)
+                
+                result = await conn.fetchrow("""
+                    UPDATE agent_sessions 
+                    SET end_time = $1, updated_at = $2
+                    WHERE session_id = $3
+                    RETURNING *
+                """, now, now, session_id)
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Session not found")
+                
+                return {
+                    "id": str(result['id']),
+                    "session_id": result['session_id'],
+                    "agent_type": result['agent_type'],
+                    "user_id": result['user_id'],
+                    "project": result['project'],
+                    "session_start": result['start_time'].isoformat(),
+                    "session_end": result['end_time'].isoformat(),
+                    "status": "completed",
+                    "context": result['context'],
+                    "updated_at": result['updated_at'].isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to end session: {e}")
+            raise
+    
+    @staticmethod
+    async def get_session_by_id(session_id: str) -> Optional[Dict[str, Any]]:
+        """Get session by ID with real database query"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                result = await conn.fetchrow("""
+                    SELECT 
+                        s.*,
+                        COUNT(a.id) as total_actions,
+                        CASE 
+                            WHEN s.end_time IS NULL THEN 'active'
+                            ELSE 'completed'
+                        END as status
+                    FROM agent_sessions s
+                    LEFT JOIN agent_actions a ON s.session_id = a.session_id
+                    WHERE s.session_id = $1
+                    GROUP BY s.id, s.session_id, s.agent_type, s.user_id, s.project, s.start_time, s.end_time, s.context, s.created_at, s.updated_at
+                """, session_id)
+                
+                if not result:
+                    return None
+                
+                return {
+                    "id": str(result['id']),
+                    "session_id": result['session_id'],
+                    "agent_type": result['agent_type'],
+                    "user_id": result['user_id'],
+                    "project": result['project'],
+                    "session_start": result['start_time'].isoformat(),
+                    "session_end": result['end_time'].isoformat() if result['end_time'] else None,
+                    "status": result['status'],
+                    "context": result['context'],
+                    "total_actions": result['total_actions'],
+                    "created_at": result['created_at'].isoformat(),
+                    "updated_at": result['updated_at'].isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get session: {e}")
             raise
 
 class DocumentQueries:

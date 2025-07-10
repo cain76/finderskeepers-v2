@@ -4,8 +4,8 @@ FROM tiangolo/uvicorn-gunicorn-fastapi:python3.11
 # Copy requirements file first
 COPY requirements.txt /app/
 
-# Install PyTorch with CUDA support first (CPU version for compatibility)
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Install PyTorch with CUDA support for GPU acceleration
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # Install dependencies using requirements file
 RUN pip install -r /app/requirements.txt

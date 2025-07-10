@@ -13,6 +13,7 @@ This server exposes tools, resources, and prompts that allow AI agents to:
 import asyncio
 import logging
 import os
+import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 import json
@@ -355,6 +356,230 @@ async def analyze_document_similarity(
             "error": str(e),
             "document_id": document_id,
             "similar_documents": [],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@mcp.tool()
+async def initialize_claude_session(
+    user_id: str = "local_user",
+    project: str = "finderskeepers-v2",
+    context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Initialize a new Claude Code session with automatic logging and context retrieval.
+    
+    Args:
+        user_id: User identifier (default: local_user)
+        project: Project context (default: finderskeepers-v2)
+        context: Additional session context (optional)
+    
+    Returns:
+        Session information with current project status and recent activity summary
+    """
+    try:
+        logger.info(f"🚀 Initializing Claude Code session for project: {project}")
+        
+        # Create session data for Claude Code
+        session_context = {
+            "client": "claude_code",
+            "version": "latest",
+            "started_at": datetime.utcnow().isoformat(),
+            "connection_type": "mcp_tool_call",
+            "auto_logging_enabled": True,
+            "purpose": "Interactive development session",
+            **(context or {})
+        }
+        
+        session_data = {
+            "agent_type": "claude-code",
+            "user_id": user_id,
+            "project": project,
+            "context": session_context
+        }
+        
+        # Call n8n Agent Session Logger webhook to create session
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{activity_logger.n8n_webhook_url}/webhook/agent-logger",
+                json=session_data,
+                timeout=10.0
+            )
+            
+            session_id = None
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and len(result) > 0:
+                    session_response = result[0]
+                    session_id = session_response.get("session_id")
+            
+            if not session_id:
+                session_id = f"claude_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                
+        # Get current project context and recent activity
+        context_data = await get_session_context(
+            project=project,
+            recent_actions=15,
+            include_files=True
+        )
+        
+        # Get project overview
+        project_overview = await get_project_overview(
+            project=project,
+            include_recent_activity=True,
+            activity_days=7
+        )
+        
+        # Log the session initialization
+        await activity_logger.log_action(
+            action_type="claude_session_init",
+            description=f"Claude Code session initialized for project {project}",
+            details={
+                "session_id": session_id,
+                "project": project,
+                "user_id": user_id,
+                "initialization_method": "mcp_tool",
+                "context_retrieved": True,
+                "recent_sessions_found": len(context_data.get("actions", [])),
+                "project_activity_level": project_overview.get("overview", {}).get("activity_level", "unknown")
+            },
+            success=True
+        )
+        
+        return {
+            "session_id": session_id,
+            "status": "initialized",
+            "project": project,
+            "current_context": context_data,
+            "project_overview": project_overview,
+            "recommendations": generate_continuation_recommendations(context_data, project_overview),
+            "message": f"✅ Claude Code session initialized! You have context from {len(context_data.get('actions', []))} recent actions.",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Claude session initialization failed: {e}")
+        await activity_logger.log_error("claude_session_init", e)
+        return {
+            "error": str(e),
+            "status": "failed",
+            "project": project,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+def generate_continuation_recommendations(context_data: Dict[str, Any], project_overview: Dict[str, Any]) -> List[str]:
+    """Generate intelligent recommendations for continuing work based on recent activity"""
+    recommendations = []
+    
+    # Analyze recent actions
+    recent_actions = context_data.get("actions", [])
+    if recent_actions:
+        latest_action = recent_actions[0]
+        action_type = latest_action.get("action_type", "")
+        
+        if "file_edit" in action_type or "fix" in action_type.lower():
+            recommendations.append("🔧 Continue fixing issues or implementing changes from the last session")
+        
+        if "commit" in action_type.lower():
+            recommendations.append("🚀 Consider pushing changes or starting new features")
+            
+        if "error" in action_type.lower() or not latest_action.get("success", True):
+            recommendations.append("⚠️ Address the error from the previous session")
+    
+    # Analyze file changes
+    file_changes = context_data.get("file_changes", [])
+    if file_changes:
+        recommendations.append(f"📄 Review changes to {len(file_changes)} files from recent sessions")
+    
+    # Analyze project activity level
+    activity_level = project_overview.get("overview", {}).get("activity_level", "")
+    if activity_level == "high":
+        recommendations.append("🔥 High activity detected - review recent progress before continuing")
+    elif activity_level == "low":
+        recommendations.append("🌱 Low recent activity - good time to start new features or major changes")
+    
+    # Default recommendation
+    if not recommendations:
+        recommendations.append("🎯 Check project status and plan next development steps")
+        
+    return recommendations[:3]  # Limit to top 3 recommendations
+
+@mcp.tool()
+async def log_claude_action(
+    session_id: str,
+    action_type: str,
+    description: str,
+    files_affected: Optional[List[str]] = None,
+    details: Optional[Dict[str, Any]] = None,
+    success: bool = True,
+    error_message: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Log a Claude Code action for automatic session tracking.
+    
+    Args:
+        session_id: Session ID from initialize_claude_session
+        action_type: Type of action (file_edit, command, config_change, etc.)
+        description: Human-readable description of the action
+        files_affected: List of files modified (optional)
+        details: Action-specific details (optional)
+        success: Whether action completed successfully (default: True)
+        error_message: Error message if action failed (optional)
+    
+    Returns:
+        Action logging confirmation with action_id
+    """
+    try:
+        logger.info(f"📝 Logging Claude action: {action_type} for session {session_id}")
+        
+        action_data = {
+            "session_id": session_id,
+            "action_type": action_type,
+            "description": description,
+            "details": details or {},
+            "files_affected": files_affected or [],
+            "success": success
+        }
+        
+        if error_message:
+            action_data["details"]["error_message"] = error_message
+        
+        # Call n8n Agent Action Tracker webhook
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{activity_logger.n8n_webhook_url}/webhook/agent-actions",
+                json=action_data,
+                timeout=10.0
+            )
+            
+            action_id = None
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and len(result) > 0:
+                    action_response = result[0]
+                    action_id = action_response.get("action_id")
+            
+            if not action_id:
+                action_id = f"action_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
+        return {
+            "action_id": action_id,
+            "session_id": session_id,
+            "status": "logged",
+            "action_type": action_type,
+            "success": success,
+            "message": f"✅ Action '{action_type}' logged successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Claude action logging failed: {e}")
+        return {
+            "error": str(e),
+            "status": "failed",
+            "session_id": session_id,
+            "action_type": action_type,
             "timestamp": datetime.utcnow().isoformat()
         }
 

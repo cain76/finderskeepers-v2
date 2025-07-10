@@ -199,15 +199,17 @@ async def query_knowledge_graph(
         }
 
 @mcp.tool()
-async def get_session_context(
+async def get_full_conversation_context(
     session_id: Optional[str] = None,
     agent_type: Optional[str] = None,
     project: Optional[str] = None,
     recent_actions: int = 10,
-    include_files: bool = True
+    include_files: bool = True,
+    include_conversation_history: bool = True,
+    conversation_limit: int = 50
 ) -> Dict[str, Any]:
     """
-    Retrieve agent session context and history from the knowledge base.
+    Retrieve complete session context including conversation history from the knowledge base.
     
     Args:
         session_id: Specific session to retrieve (optional)
@@ -215,9 +217,11 @@ async def get_session_context(
         project: Filter by project context (optional)
         recent_actions: Number of recent actions to include (default: 10)
         include_files: Whether to include file change information (default: True)
+        include_conversation_history: Whether to include full conversation messages (default: True)
+        conversation_limit: Maximum conversation messages to retrieve (default: 50)
     
     Returns:
-        Session context with actions, metadata, and file changes
+        Complete session context with actions, conversation history, metadata, and file changes
     """
     try:
         logger.info(f"📋 Getting session context: {session_id or 'recent sessions'}")
@@ -247,10 +251,54 @@ async def get_session_context(
                 [action["action_id"] for action in actions]
             )
         
+        # Get conversation history if requested
+        conversation_messages = []
+        conversation_summary = {}
+        if include_conversation_history and actions:
+            # Filter actions to get conversation messages
+            conversation_actions = [
+                action for action in actions 
+                if action.get("action_type", "").startswith("conversation:")
+            ]
+            
+            # Process conversation messages with full context
+            for conv_action in conversation_actions[:conversation_limit]:
+                details = conv_action.get("details", {})
+                conversation_messages.append({
+                    "message_id": conv_action.get("action_id"),
+                    "timestamp": conv_action.get("timestamp"),
+                    "message_type": details.get("message_type"),
+                    "content": details.get("full_content", ""),
+                    "content_length": details.get("content_length", 0),
+                    "emotional_indicators": details.get("emotional_indicators", []),
+                    "topic_keywords": details.get("topic_keywords", []),
+                    "tools_used": details.get("tools_used", []),
+                    "files_referenced": details.get("files_referenced", []),
+                    "reasoning": details.get("reasoning"),
+                    "context": details.get("context", {})
+                })
+            
+            # Generate conversation summary
+            user_messages = [m for m in conversation_messages if m["message_type"] == "user_message"]
+            ai_responses = [m for m in conversation_messages if m["message_type"] == "ai_response"]
+            
+            conversation_summary = {
+                "total_messages": len(conversation_messages),
+                "user_messages": len(user_messages),
+                "ai_responses": len(ai_responses),
+                "dominant_emotions": get_dominant_emotions(conversation_messages),
+                "key_topics": get_key_topics(conversation_messages),
+                "conversation_flow": analyze_conversation_flow(conversation_messages),
+                "last_user_message": user_messages[0]["content"][:200] if user_messages else None,
+                "last_ai_response": ai_responses[0]["content"][:200] if ai_responses else None
+            }
+        
         return {
             "session": session,
             "actions": actions,
             "file_changes": file_changes if include_files else [],
+            "conversation_history": conversation_messages if include_conversation_history else [],
+            "conversation_summary": conversation_summary if include_conversation_history else {},
             "summary": {
                 "session_id": session["session_id"] if session else None,
                 "agent_type": session["agent_type"] if session else None,
@@ -416,11 +464,13 @@ async def initialize_claude_session(
             if not session_id:
                 session_id = f"claude_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
                 
-        # Get current project context and recent activity
-        context_data = await get_session_context(
+        # Get current project context and recent activity with FULL conversation history
+        context_data = await get_full_conversation_context(
             project=project,
-            recent_actions=15,
-            include_files=True
+            recent_actions=20,
+            include_files=True,
+            include_conversation_history=True,
+            conversation_limit=30
         )
         
         # Get project overview
@@ -503,6 +553,163 @@ def generate_continuation_recommendations(context_data: Dict[str, Any], project_
         recommendations.append("🎯 Check project status and plan next development steps")
         
     return recommendations[:3]  # Limit to top 3 recommendations
+
+@mcp.tool()
+async def log_conversation_message(
+    session_id: str,
+    message_type: str,  # "user_message" or "ai_response"
+    content: str,
+    context: Optional[Dict[str, Any]] = None,
+    reasoning: Optional[str] = None,
+    tools_used: Optional[List[str]] = None,
+    files_referenced: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Log detailed conversation messages for complete context preservation.
+    
+    Args:
+        session_id: Session ID from initialize_claude_session
+        message_type: "user_message", "ai_response", "system_message", "tool_result"
+        content: Full message content
+        context: Additional context (emotional tone, urgency, topic changes)
+        reasoning: AI reasoning process and decision-making (for AI responses)
+        tools_used: List of tools used in this interaction
+        files_referenced: Files mentioned or referenced in the message
+    
+    Returns:
+        Message logging confirmation with message_id
+    """
+    try:
+        logger.info(f"💬 Logging conversation message: {message_type} for session {session_id}")
+        
+        message_data = {
+            "session_id": session_id,
+            "action_type": f"conversation:{message_type}",
+            "description": f"Conversation {message_type}: {content[:100]}..." if len(content) > 100 else content,
+            "details": {
+                "message_type": message_type,
+                "full_content": content,
+                "content_length": len(content),
+                "context": context or {},
+                "reasoning": reasoning,
+                "tools_used": tools_used or [],
+                "files_referenced": files_referenced or [],
+                "emotional_indicators": extract_emotional_context(content),
+                "topic_keywords": extract_topic_keywords(content),
+                "conversation_flow": "continuation" if message_type == "user_message" else "response"
+            },
+            "files_affected": files_referenced or [],
+            "success": True
+        }
+        
+        # Call n8n Agent Action Tracker webhook for conversation logging
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{activity_logger.n8n_webhook_url}/webhook/agent-actions",
+                json=message_data,
+                timeout=10.0
+            )
+            
+            message_id = None
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and len(result) > 0:
+                    message_response = result[0]
+                    message_id = message_response.get("action_id")
+            
+            if not message_id:
+                message_id = f"msg_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
+        return {
+            "message_id": message_id,
+            "session_id": session_id,
+            "status": "logged",
+            "message_type": message_type,
+            "content_length": len(content),
+            "message": f"✅ Conversation {message_type} logged successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Conversation logging failed: {e}")
+        return {
+            "error": str(e),
+            "status": "failed",
+            "session_id": session_id,
+            "message_type": message_type,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+def extract_emotional_context(content: str) -> List[str]:
+    """Extract emotional indicators from message content"""
+    emotional_indicators = []
+    content_lower = content.lower()
+    
+    if any(word in content_lower for word in ["!!", "excited", "amazing", "awesome", "love"]):
+        emotional_indicators.append("high_enthusiasm")
+    if any(word in content_lower for word in ["frustrated", "annoying", "hate", "terrible"]):
+        emotional_indicators.append("frustration")
+    if "?" in content and any(word in content_lower for word in ["how", "what", "why", "when", "where"]):
+        emotional_indicators.append("inquiry")
+    if any(word in content_lower for word in ["god", "ultimate", "all-knowing", "perfect"]):
+        emotional_indicators.append("aspiration")
+    if "MAJOR" in content or content.isupper():
+        emotional_indicators.append("emphasis")
+        
+    return emotional_indicators
+
+def extract_topic_keywords(content: str) -> List[str]:
+    """Extract key topics and concepts from message content"""
+    import re
+    
+    # Technical keywords
+    tech_keywords = re.findall(r'\b(?:docker|gpu|cuda|mcp|session|logging|database|ai|llm|ollama|fastapi|neo4j|qdrant)\b', content.lower())
+    
+    # Action keywords  
+    action_keywords = re.findall(r'\b(?:implement|fix|create|add|update|configure|test|deploy|commit|push)\b', content.lower())
+    
+    # Concept keywords
+    concept_keywords = re.findall(r'\b(?:conversation|context|memory|knowledge|intelligence|automation|integration)\b', content.lower())
+    
+    return list(set(tech_keywords + action_keywords + concept_keywords))
+
+def get_dominant_emotions(conversation_messages: List[Dict[str, Any]]) -> List[str]:
+    """Analyze dominant emotional patterns in conversation"""
+    emotion_counts = {}
+    for message in conversation_messages:
+        for emotion in message.get("emotional_indicators", []):
+            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+    
+    # Return top 3 emotions
+    sorted_emotions = sorted(emotion_counts.items(), key=lambda x: x[1], reverse=True)
+    return [emotion for emotion, count in sorted_emotions[:3]]
+
+def get_key_topics(conversation_messages: List[Dict[str, Any]]) -> List[str]:
+    """Extract key topics discussed in conversation"""
+    topic_counts = {}
+    for message in conversation_messages:
+        for topic in message.get("topic_keywords", []):
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+    
+    # Return top 5 topics
+    sorted_topics = sorted(topic_counts.items(), key=lambda x: x[1], reverse=True)
+    return [topic for topic, count in sorted_topics[:5]]
+
+def analyze_conversation_flow(conversation_messages: List[Dict[str, Any]]) -> str:
+    """Analyze the flow and pattern of the conversation"""
+    if not conversation_messages:
+        return "no_conversation"
+    
+    user_msg_count = len([m for m in conversation_messages if m["message_type"] == "user_message"])
+    ai_msg_count = len([m for m in conversation_messages if m["message_type"] == "ai_response"])
+    
+    if user_msg_count > ai_msg_count:
+        return "user_driven"
+    elif ai_msg_count > user_msg_count:
+        return "ai_driven"
+    else:
+        return "balanced_dialogue"
 
 @mcp.tool()
 async def log_claude_action(

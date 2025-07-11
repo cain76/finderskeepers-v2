@@ -265,30 +265,6 @@ services:
     networks:
       - finderskeepers_network
 
-  # ========================================
-  # MCP N8N - Model Context Protocol Integration
-  # ========================================
-  mcp-n8n:
-    image: ghcr.io/czlonkowski/n8n-mcp:latest
-    container_name: fk2_mcp_n8n
-    restart: unless-stopped
-    ports:
-      - "3002:3000"
-    environment:
-      - CUDA_VISIBLE_DEVICES=0
-      - NVIDIA_VISIBLE_DEVICES=0
-    # MCP server runs on stdio transport, not HTTP - removed healthcheck
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    depends_on:
-      - fastapi
-    networks:
-      - finderskeepers_network
 
   # ========================================
   # CHAT INTERFACE (Future Enhancement)

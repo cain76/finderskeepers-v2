@@ -22,3 +22,16 @@ backups/
 services/diary-api/test_env/
 *.env
 .env
+
+# Investigation and debugging artifacts
+investigate-upload-status.js
+screenshots/
+test-docs/
+
+# Temporary documentation artifacts  
+docs/resources/langchain-fastapi-integration/
+
+# Investigation scripts and reports (already committed main reports)
+*investigation*.js
+*debug*.js
+*puppeteer*.js

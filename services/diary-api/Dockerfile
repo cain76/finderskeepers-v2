@@ -1,11 +1,17 @@
 # Use Python 3.12 official image
 FROM python:3.12-slim
 
-# Install system dependencies
+# Install system dependencies including OpenGL for EasyOCR
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
     libmagic1 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

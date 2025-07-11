@@ -8,6 +8,7 @@
     "@upstash/context7-mcp": "^1.0.14",
     "@wonderwhy-er/desktop-commander": "^0.2.3",
     "mcp-server-kubernetes": "^2.5.0",
+    "puppeteer": "^24.12.1",
     "puppeteer-mcp-server": "^0.7.2",
     "think-mcp": "^0.1.5"
   }

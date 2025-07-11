@@ -258,6 +258,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules  # Anonymous volume for node_modules
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for file operations
     depends_on:
       - fastapi
       - neo4j

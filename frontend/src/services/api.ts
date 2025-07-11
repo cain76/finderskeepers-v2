@@ -149,7 +149,36 @@ class ApiService {
       method: 'POST',
       body: formData,
       signal: signal || this.controller.signal,
-    }).then(response => response.json());
+    }).then(async response => {
+      const data = await response.json();
+      
+      // The ingestion API returns a different format than expected
+      // Transform the response to match our ApiResponse interface
+      if (response.ok && data.status === 'queued') {
+        return {
+          success: true,
+          data: data,
+          message: data.message || 'File uploaded successfully',
+          timestamp: new Date().toISOString()
+        };
+      } else if (response.ok) {
+        // Handle other successful statuses
+        return {
+          success: true,
+          data: data,
+          message: data.message || 'Upload completed',
+          timestamp: new Date().toISOString()
+        };
+      } else {
+        // Handle HTTP errors
+        return {
+          success: false,
+          error: data.error || 'Upload failed',
+          message: data.message || `HTTP ${response.status}: ${response.statusText}`,
+          timestamp: new Date().toISOString()
+        };
+      }
+    });
   }
 
   async deleteDocument(documentId: string): Promise<ApiResponse<any>> {

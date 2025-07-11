@@ -109,6 +109,8 @@ export default function Documents() {
   const [uploadProgress, setUploadProgress] = React.useState<UploadProgress[]>([]);
   const [isUploading, setIsUploading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [uploadCancelled, setUploadCancelled] = React.useState(false);
+  const activeUploadsRef = React.useRef<Map<number, AbortController>>(new Map());
 
   React.useEffect(() => {
     loadDocuments();
@@ -128,86 +130,36 @@ export default function Documents() {
       });
 
       if (response.success && response.data) {
-        setDocuments(response.data.documents || []);
-        setTotalPages(response.data.total_pages || 1);
-        setStats(response.data.stats || stats);
+        // Handle stats endpoint response structure
+        const data = response.data;
+        if (data.total_documents !== undefined) {
+          // This is from /api/stats/documents endpoint
+          setDocuments([]); // No individual documents in stats endpoint
+          setTotalPages(1);
+          setStats({
+            total: data.total_documents,
+            totalSize: Math.round(data.storage_used_mb * 1024 * 1024), // Convert MB to bytes
+            formats: data.document_types || {},
+            projects: data.projects || {},
+          });
+        } else {
+          // This would be from a proper documents list endpoint
+          setDocuments(response.data.documents || []);
+          setTotalPages(response.data.total_pages || 1);
+          setStats(response.data.stats || stats);
+        }
       }
     } catch (error) {
       console.error('Failed to load documents:', error);
       
-      // Mock data for development
-      const mockDocuments: Document[] = [
-        {
-          id: '1',
-          title: 'FastAPI Setup Guide',
-          content: 'Comprehensive guide for setting up FastAPI...',
-          format: 'markdown',
-          project: 'finderskeepers-v2',
-          tags: ['guide', 'backend', 'python'],
-          file_path: '/docs/fastapi-setup.md',
-          file_size: 15420,
-          created_at: '2025-07-08T10:00:00Z',
-          updated_at: '2025-07-08T10:00:00Z',
-          metadata: {
-            author: 'claude',
-            version: '1.0',
-          },
-        },
-        {
-          id: '2',
-          title: 'React Component Architecture',
-          content: 'Design patterns for React components...',
-          format: 'markdown',
-          project: 'finderskeepers-v2',
-          tags: ['frontend', 'react', 'architecture'],
-          file_path: '/docs/react-architecture.md',
-          file_size: 23150,
-          created_at: '2025-07-07T15:30:00Z',
-          updated_at: '2025-07-08T09:15:00Z',
-          metadata: {
-            author: 'claude',
-            version: '2.1',
-          },
-        },
-        {
-          id: '3',
-          title: 'Database Schema Design',
-          content: 'PostgreSQL and Neo4j schema documentation...',
-          format: 'markdown',
-          project: 'finderskeepers-v2',
-          tags: ['database', 'schema', 'postgresql', 'neo4j'],
-          file_path: '/docs/database-schema.md',
-          file_size: 18900,
-          created_at: '2025-07-06T11:20:00Z',
-          updated_at: '2025-07-07T14:45:00Z',
-          metadata: {
-            author: 'claude',
-            version: '1.5',
-          },
-        },
-        {
-          id: '4',
-          title: 'API Configuration',
-          content: '{\n  "api_version": "v1",\n  "endpoints": [...]\n}',
-          format: 'json',
-          project: 'finderskeepers-v2',
-          tags: ['config', 'api'],
-          file_path: '/config/api.json',
-          file_size: 5670,
-          created_at: '2025-07-05T16:10:00Z',
-          updated_at: '2025-07-06T12:30:00Z',
-          metadata: {
-            type: 'configuration',
-          },
-        },
-      ];
-
-      setDocuments(mockDocuments);
+      // NO MOCK DATA - Show real API failure status
+      console.warn('Document API failed - showing empty state');
+      setDocuments([]);
       setStats({
-        total: 4,
-        totalSize: 63140,
-        formats: { markdown: 3, json: 1 },
-        projects: { 'finderskeepers-v2': 4 },
+        total: 0,
+        totalSize: 0,
+        formats: {},
+        projects: {},
       });
       setTotalPages(1);
     } finally {
@@ -225,56 +177,16 @@ export default function Documents() {
 
     const files = Array.from(selectedFiles);
     setIsUploading(true);
+    setUploadCancelled(false); // Reset cancellation state
+    activeUploadsRef.current.clear(); // Clear any previous controllers
     setUploadProgress(files.map(file => ({
       filename: file.name,
       progress: 0,
       status: 'pending' as const,
     })));
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      
-      try {
-        // Update progress
-        setUploadProgress(prev => prev.map((item, index) => 
-          index === i ? { ...item, status: 'uploading' as const } : item
-        ));
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('project', 'finderskeepers-v2');
-        
-        // Simulate progress
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => prev.map((item, index) => 
-            index === i && item.progress < 90 
-              ? { ...item, progress: item.progress + Math.random() * 20 }
-              : item
-          ));
-        }, 200);
-
-        const response = await apiService.uploadDocument(formData);
-        
-        clearInterval(progressInterval);
-        
-        setUploadProgress(prev => prev.map((item, index) => 
-          index === i ? { 
-            ...item, 
-            progress: 100, 
-            status: response.success ? 'completed' as const : 'error' as const,
-            error: response.success ? undefined : (response.message || 'Upload failed')
-          } : item
-        ));
-      } catch (error) {
-        setUploadProgress(prev => prev.map((item, index) => 
-          index === i ? { 
-            ...item, 
-            status: 'error' as const,
-            error: error instanceof Error ? error.message : 'Upload failed'
-          } : item
-        ));
-      }
-    }
+    // Upload files with rate limiting and concurrency control
+    await uploadFilesWithRateLimit(files);
 
     setIsUploading(false);
     
@@ -285,6 +197,165 @@ export default function Documents() {
       setUploadProgress([]);
       loadDocuments();
     }, 2000);
+  };
+
+  const cancelAllUploads = () => {
+    setUploadCancelled(true);
+    // Cancel all active uploads
+    activeUploadsRef.current.forEach(controller => {
+      controller.abort();
+    });
+    activeUploadsRef.current.clear();
+    
+    // Update progress to show cancelled status
+    setUploadProgress(prev => prev.map(item => 
+      item.status === 'uploading' || item.status === 'pending'
+        ? { ...item, status: 'error' as const, error: 'Upload cancelled' }
+        : item
+    ));
+    
+    setIsUploading(false);
+  };
+
+  const uploadFilesWithRateLimit = async (files: File[]) => {
+    const MAX_CONCURRENT_UPLOADS = 3;
+    const UPLOAD_DELAY = 750; // 750ms delay between uploads
+    const MAX_RETRIES = 3;
+    
+    // Create a queue of files to process
+    const queue = files.map((file, index) => ({ file, index }));
+    const activeUploads = new Set<Promise<void>>();
+    
+    const uploadSingleFile = async (file: File, index: number, retryCount = 0): Promise<void> => {
+      // Check if upload was cancelled
+      if (uploadCancelled) {
+        setUploadProgress(prev => prev.map((item, i) => 
+          i === index ? { ...item, status: 'error' as const, error: 'Upload cancelled' } : item
+        ));
+        return;
+      }
+
+      // Create abort controller for this upload
+      const abortController = new AbortController();
+      activeUploadsRef.current.set(index, abortController);
+
+      try {
+        // Update status to uploading
+        setUploadProgress(prev => prev.map((item, i) => 
+          i === index ? { ...item, status: 'uploading' as const, progress: 0 } : item
+        ));
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project', 'finderskeepers-v2');
+        
+        // Start progress tracking
+        const progressInterval = setInterval(() => {
+          if (uploadCancelled) {
+            clearInterval(progressInterval);
+            return;
+          }
+          setUploadProgress(prev => prev.map((item, i) => 
+            i === index && item.progress < 90 
+              ? { ...item, progress: Math.min(90, item.progress + Math.random() * 15) }
+              : item
+          ));
+        }, 500);
+
+        const response = await apiService.uploadDocument(formData, undefined, abortController.signal);
+        
+        clearInterval(progressInterval);
+        
+        if (response.success) {
+          setUploadProgress(prev => prev.map((item, i) => 
+            i === index ? { 
+              ...item, 
+              progress: 100, 
+              status: 'completed' as const 
+            } : item
+          ));
+        } else {
+          throw new Error(response.message || 'Upload failed');
+        }
+      } catch (error) {
+        // Clean up controller
+        activeUploadsRef.current.delete(index);
+        
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setUploadProgress(prev => prev.map((item, i) => 
+            i === index ? { 
+              ...item, 
+              status: 'error' as const,
+              error: 'Upload cancelled'
+            } : item
+          ));
+          return;
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        
+        // Retry logic for failed uploads
+        if (retryCount < MAX_RETRIES && !uploadCancelled) {
+          console.log(`Retrying upload for ${file.name} (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+          
+          // Exponential backoff delay
+          const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          
+          setUploadProgress(prev => prev.map((item, i) => 
+            i === index ? { 
+              ...item, 
+              status: 'pending' as const,
+              progress: 0,
+              error: `Retrying... (${retryCount + 1}/${MAX_RETRIES})`
+            } : item
+          ));
+          
+          return uploadSingleFile(file, index, retryCount + 1);
+        } else {
+          // Final failure after all retries
+          setUploadProgress(prev => prev.map((item, i) => 
+            i === index ? { 
+              ...item, 
+              status: 'error' as const,
+              error: `Failed after ${MAX_RETRIES} retries: ${errorMessage}`
+            } : item
+          ));
+        }
+      } finally {
+        // Clean up controller
+        activeUploadsRef.current.delete(index);
+      }
+    };
+    
+    // Process queue with concurrency control
+    while (queue.length > 0 || activeUploads.size > 0) {
+      // Check if upload was cancelled
+      if (uploadCancelled) {
+        break;
+      }
+
+      // Start new uploads if we have capacity and files in queue
+      while (activeUploads.size < MAX_CONCURRENT_UPLOADS && queue.length > 0 && !uploadCancelled) {
+        const { file, index } = queue.shift()!;
+        
+        const uploadPromise = uploadSingleFile(file, index).finally(() => {
+          activeUploads.delete(uploadPromise);
+        });
+        
+        activeUploads.add(uploadPromise);
+        
+        // Rate limiting delay between starting uploads
+        if (queue.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, UPLOAD_DELAY));
+        }
+      }
+      
+      // Wait for at least one upload to complete
+      if (activeUploads.size > 0) {
+        await Promise.race(activeUploads);
+      }
+    }
   };
 
   const handleFolderUpload = async () => {
@@ -742,6 +813,16 @@ export default function Documents() {
           <Button onClick={() => setUploadDialogOpen(false)}>
             Cancel
           </Button>
+          {isUploading && (
+            <Button
+              onClick={cancelAllUploads}
+              variant="outlined"
+              color="error"
+              startIcon={<StopIcon />}
+            >
+              Cancel Uploads
+            </Button>
+          )}
           <Button
             onClick={handleFileUpload}
             variant="contained"

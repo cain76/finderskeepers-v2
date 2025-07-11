@@ -119,6 +119,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",  # React development server
         "http://127.0.0.1:3000",  # React development server (alt)
+        "http://localhost:3001",  # React development server (port 3001)
+        "http://127.0.0.1:3001",  # React development server (port 3001 alt)
+        "http://localhost:3002",  # React development server (port 3002)
+        "http://127.0.0.1:3002",  # React development server (port 3002 alt)
+        "http://localhost:3003",  # React development server (port 3003)
+        "http://127.0.0.1:3003",  # React development server (port 3003 alt)
         "http://localhost:5173",  # Vite development server (fallback)
         "http://127.0.0.1:5173",  # Vite development server (fallback)
     ],
@@ -130,6 +136,8 @@ app.add_middleware(
 # Include routers
 app.include_router(ingestion_router)
 app.include_router(diary_router)
+
+
 
 # ========================================
 # DATA MODELS
@@ -208,6 +216,7 @@ async def root():
         }
     }
 
+
 @app.get("/health", tags=["System"])
 async def health_check():
     """System health check with REAL database status"""
@@ -240,6 +249,39 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
+
+@app.get("/api/simple-test")
+async def simple_test():
+    return {"message": "Simple test endpoint works!"}
+
+@app.get("/api/documents-list", tags=["Knowledge"])
+async def get_documents_list(
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None,
+    format: Optional[str] = None,
+    project: Optional[str] = None,
+    tags: Optional[str] = None,
+    file_type: Optional[str] = None
+):
+    """Get documents list from database - Frontend endpoint"""
+    try:
+        logger.info(f"Getting documents: page={page}, limit={limit}, search={search}")
+        
+        # Simple test first
+        return {
+            "success": True,
+            "data": {
+                "documents": [],
+                "total_pages": 0,
+                "current_page": page
+            },
+            "message": "Test endpoint working - Route registered successfully!",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Get documents failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================
 # EMBEDDINGS API - For MCP Knowledge Server
@@ -342,6 +384,31 @@ async def ingest_document(doc: DocumentIngest, background_tasks: BackgroundTasks
         }
     except Exception as e:
         logger.error(f"Document ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/docs/by-id/{document_id}", tags=["Knowledge"])
+async def get_document(document_id: str):
+    """Get single document by ID"""
+    try:
+        logger.info(f"Getting document: {document_id}")
+        
+        # Get document from database
+        document = await DocumentQueries.get_document_by_id(document_id)
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        return {
+            "success": True,
+            "data": document,
+            "message": f"Retrieved document {document_id}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get document failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/docs/context", tags=["Knowledge"])

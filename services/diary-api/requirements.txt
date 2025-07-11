@@ -25,6 +25,16 @@ transformers>=4.36.0     # Hugging Face transformers
 accelerate>=0.25.0       # GPU acceleration utilities
 sentence-transformers>=2.2.0  # Sentence embeddings
 
+# Document Processing
+unstructured[all-docs]>=0.10.0  # Universal document parsing
+langchain>=0.1.0               # Core LangChain library
+langchain-community>=0.0.13     # Document loaders
+langchain-core>=0.1.0          # Core LangChain components
+python-magic>=0.4.27           # File type detection
+easyocr>=1.7.0                 # OCR processing (includes opencv-python-headless)
+openai-whisper>=20231117       # Audio transcription
+Pillow>=10.0.0                 # Image processing
+
 # Utilities
 python-dotenv>=1.0.0     # Environment variables
 python-jose[cryptography]>=3.3.0  # JWT tokens

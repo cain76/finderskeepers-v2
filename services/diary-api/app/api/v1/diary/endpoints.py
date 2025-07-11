@@ -244,3 +244,12 @@ async def search_sessions(
     except Exception as e:
         logger.error(f"Search failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# # ========================================
+# # DOCUMENTS ENDPOINT - Frontend Support  
+# # ========================================
+
+@router.get("/test")
+async def test_endpoint():
+    """Simple test endpoint"""
+    return {"message": "Test endpoint working"}

@@ -714,3 +714,48 @@ class DocumentQueries:
         except Exception as e:
             logger.error(f"Failed to get documents: {e}")
             raise
+    
+    @staticmethod
+    async def get_document_by_id(document_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific document by ID"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                document = await conn.fetchrow("""
+                    SELECT 
+                        id,
+                        title,
+                        file_path,
+                        project,
+                        doc_type,
+                        file_size,
+                        status,
+                        created_at,
+                        updated_at,
+                        metadata,
+                        tags,
+                        content_preview
+                    FROM documents
+                    WHERE id = $1
+                """, document_id)
+                
+                if not document:
+                    return None
+                
+                return {
+                    "id": str(document['id']),
+                    "title": document['title'],
+                    "file_path": document['file_path'],
+                    "project": document['project'],
+                    "type": document['doc_type'],
+                    "size": document['file_size'],
+                    "status": document['status'],
+                    "created": document['created_at'].isoformat(),
+                    "updated": document['updated_at'].isoformat(),
+                    "metadata": document['metadata'],
+                    "tags": document['tags'] or [],
+                    "preview": document['content_preview']
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get document {document_id}: {e}")
+            raise

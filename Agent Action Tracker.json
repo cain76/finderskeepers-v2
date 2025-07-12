@@ -64,6 +64,24 @@
               "name": "success",
               "value": "={{ $json.body.success !== undefined ? $json.body.success : true }}",
               "type": "boolean"
+            },
+            {
+              "id": "is_heartbeat",
+              "name": "is_heartbeat",
+              "value": "={{ $json.body.action_type === 'heartbeat' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "is_exit_command",
+              "name": "is_exit_command",
+              "value": "={{ $json.body.action_type === 'user_exit_command' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "priority",
+              "name": "priority",
+              "value": "={{ $json.body.action_type === 'heartbeat' ? 'low' : ($json.body.action_type === 'user_exit_command' ? 'high' : 'normal') }}",
+              "type": "string"
             }
           ]
         },
@@ -75,6 +93,38 @@
       "typeVersion": 3.4,
       "position": [
         -600,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip_heartbeat",
+              "leftValue": "={{ $('Transform Action Data').item.json.action_type }}",
+              "rightValue": "heartbeat",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3f8e7d5c-1a2b-4c9d-8e6f-9b0c4d3e2f1a",
+      "name": "Filter Heartbeats",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -400,
         240
       ]
     },
@@ -92,7 +142,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -400,
+        -200,
         240
       ]
     },
@@ -133,7 +183,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -200,
+        0,
         240
       ]
     }
@@ -153,6 +203,18 @@
     },
     "Transform Action Data": {
       "main": [
+        [
+          {
+            "node": "Filter Heartbeats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Heartbeats": {
+      "main": [
+        [],
         [
           {
             "node": "Notify FastAPI Actions",

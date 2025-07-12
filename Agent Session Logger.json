@@ -21,6 +21,24 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "session-end",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "9b12d99c-744f-4c55-bc22-ff4ee7d9c890",
+      "name": "Session End Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        460
+      ],
+      "webhookId": "8e34f12a-901b-4d66-a7c3-1b5ee2a8d901"
+    },
+    {
+      "parameters": {
         "assignments": {
           "assignments": [
             {
@@ -112,6 +130,106 @@
         -40,
         260
       ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $json.body.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $json.body.status || 'ended' }}",
+              "type": "string"
+            },
+            {
+              "id": "end_time",
+              "name": "end_time",
+              "value": "={{ $json.body.end_time }}",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "reason",
+              "value": "={{ $json.body.reason || 'graceful_shutdown' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7c45e88b-9a12-4f67-8d34-2e5bb1c8f901",
+      "name": "Transform Session End Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -440,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://fk2_fastapi/api/diary/sessions/{{ $('Transform Session End Data').item.json.session_id }}/end",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"reason\": \"{{ $('Transform Session End Data').item.json.reason }}\",\n    \"end_time\": \"{{ $('Transform Session End Data').item.json.end_time }}\",\n    \"webhook_termination\": true\n}",
+        "options": {}
+      },
+      "id": "4d8f7a23-6e19-4c90-b567-8a9cd2e7f012",
+      "name": "End Session in FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Session terminated successfully",
+              "type": "string"
+            },
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $('Transform Session End Data').item.json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "reason",
+              "value": "={{ $('Transform Session End Data').item.json.reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9e67f2a4-8b21-4d89-a456-7c9ff3e8b012",
+      "name": "Session End Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -40,
+        460
+      ]
     }
   ],
   "pinData": {},
@@ -121,6 +239,17 @@
         [
           {
             "node": "Transform Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session End Webhook": {
+      "main": [
+        [
+          {
+            "node": "Transform Session End Data",
             "type": "main",
             "index": 0
           }
@@ -138,11 +267,33 @@
         ]
       ]
     },
+    "Transform Session End Data": {
+      "main": [
+        [
+          {
+            "node": "End Session in FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Notify FastAPI": {
       "main": [
         [
           {
             "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End Session in FastAPI": {
+      "main": [
+        [
+          {
+            "node": "Session End Response",
             "type": "main",
             "index": 0
           }

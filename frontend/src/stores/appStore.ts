@@ -10,9 +10,15 @@ import type {
   AppError
 } from '@/types';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 interface AppState {
   // Configuration
   config: AppConfig;
+  
+  // Theme Management
+  theme: ThemeMode;
+  resolvedTheme: 'light' | 'dark';
   
   // UI State
   dashboard: DashboardState;
@@ -44,6 +50,8 @@ interface AppState {
   
   // Actions
   setConfig: (config: Partial<AppConfig>) => void;
+  setTheme: (theme: ThemeMode) => void;
+  toggleTheme: () => void;
   updateDashboard: (updates: Partial<DashboardState>) => void;
   setSystemHealth: (health: SystemHealth) => void;
   setLoading: (key: keyof AppState['isLoading'], value: boolean) => void;
@@ -55,6 +63,20 @@ interface AppState {
   addRecentActivity: (activity: any) => void;
   reset: () => void;
 }
+
+// System preference detection helper
+const getSystemTheme = (): 'light' | 'dark' => {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+};
+
+// Resolve theme helper
+const resolveTheme = (theme: ThemeMode): 'light' | 'dark' => 
+  theme === 'system' ? getSystemTheme() : theme;
 
 const initialState = {
   config: {
@@ -68,6 +90,9 @@ const initialState = {
       sessionMonitoring: true,
     },
   },
+  
+  theme: 'light' as ThemeMode,
+  resolvedTheme: 'light' as const,
   
   dashboard: {
     activeView: 'overview' as const,
@@ -109,6 +134,21 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           config: { ...state.config, ...config },
         }), false, 'setConfig'),
+      
+      setTheme: (theme) =>
+        set((state) => ({
+          theme,
+          resolvedTheme: resolveTheme(theme),
+        }), false, 'setTheme'),
+      
+      toggleTheme: () =>
+        set((state) => {
+          const newTheme = state.resolvedTheme === 'dark' ? 'light' : 'dark';
+          return {
+            theme: newTheme,
+            resolvedTheme: newTheme,
+          };
+        }, false, 'toggleTheme'),
       
       updateDashboard: (updates) =>
         set((state) => ({
@@ -163,6 +203,7 @@ export const useAppStore = create<AppState>()(
       name: 'finderskeepers-app-store',
       partialize: (state: AppState) => ({
         config: state.config,
+        theme: state.theme,
         dashboard: state.dashboard,
       }),
     }
@@ -171,6 +212,15 @@ export const useAppStore = create<AppState>()(
 
 // Selector hooks for specific parts of the store
 export const useConfig = () => useAppStore((state) => state.config);
+export const useTheme = () => useAppStore((state) => ({ 
+  theme: state.theme, 
+  resolvedTheme: state.resolvedTheme,
+  setTheme: state.setTheme,
+  toggleTheme: state.toggleTheme,
+  isDark: state.resolvedTheme === 'dark',
+  isLight: state.resolvedTheme === 'light',
+  isSystem: state.theme === 'system'
+}));
 export const useDashboard = () => useAppStore((state) => state.dashboard);
 export const useSystemHealth = () => useAppStore((state) => state.systemHealth);
 export const useLoading = () => useAppStore((state) => state.isLoading);

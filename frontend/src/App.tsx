@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline, Container, Paper, Typography, Box, TextField, Button } from '@mui/material';
+import { CssBaseline, Typography, Box, IconButton } from '@mui/material';
+import { LightMode, DarkMode } from '@mui/icons-material';
 
-// Import sophisticated page components
+// Import page components
 import Dashboard from './pages/Dashboard_working';
 import AgentSessions from './pages/AgentSessions';
 import Documents from './pages/Documents';
@@ -11,110 +12,204 @@ import VectorSearch from './pages/VectorSearch';
 import KnowledgeGraph from './pages/KnowledgeGraph';
 import SystemMonitoring from './pages/SystemMonitoring';
 import Chat from './pages/Chat';
-// Settings component will be created later
-function Settings() {
-  return <div style={{padding: '20px'}}><h1>Settings</h1><p>Configure your FindersKeepers preferences</p></div>;
+
+// Settings component with theme controls
+function Settings({ darkMode, toggleTheme }: { darkMode: boolean; toggleTheme: () => void }) {
+  return (
+    <Box sx={{ maxWidth: 800, mx: 'auto', p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Settings
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+        Configure your FindersKeepers v2 preferences
+      </Typography>
+
+      {/* Theme Settings Card */}
+      <Box 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          border: 1, 
+          borderColor: 'divider', 
+          borderRadius: 2,
+          backgroundColor: 'background.paper'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Appearance
+          </Typography>
+          <IconButton onClick={toggleTheme} color="primary">
+            {darkMode ? <LightMode /> : <DarkMode />}
+          </IconButton>
+        </Box>
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Choose how FindersKeepers looks to you.
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <Box 
+            onClick={() => darkMode && toggleTheme()}
+            sx={{ 
+              p: 2, 
+              border: 1, 
+              borderColor: !darkMode ? 'primary.main' : 'divider',
+              borderRadius: 1,
+              cursor: 'pointer',
+              backgroundColor: !darkMode ? 'primary.main' : 'transparent',
+              color: !darkMode ? 'primary.contrastText' : 'text.primary',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              '&:hover': { opacity: 0.8 }
+            }}
+          >
+            <LightMode fontSize="small" />
+            <Typography variant="body2">Light</Typography>
+            {!darkMode && <Typography variant="caption">(Active)</Typography>}
+          </Box>
+
+          <Box 
+            onClick={() => !darkMode && toggleTheme()}
+            sx={{ 
+              p: 2, 
+              border: 1, 
+              borderColor: darkMode ? 'primary.main' : 'divider',
+              borderRadius: 1,
+              cursor: 'pointer',
+              backgroundColor: darkMode ? 'primary.main' : 'transparent',
+              color: darkMode ? 'primary.contrastText' : 'text.primary',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              '&:hover': { opacity: 0.8 }
+            }}
+          >
+            <DarkMode fontSize="small" />
+            <Typography variant="body2">Dark</Typography>
+            {darkMode && <Typography variant="caption">(Active)</Typography>}
+          </Box>
+        </Box>
+
+        <Typography variant="caption" color="text.secondary">
+          Current theme: {darkMode ? 'Dark' : 'Light'} mode
+        </Typography>
+      </Box>
+
+      {/* Application Settings Card */}
+      <Box 
+        sx={{ 
+          p: 3, 
+          border: 1, 
+          borderColor: 'divider', 
+          borderRadius: 2,
+          backgroundColor: 'background.paper'
+        }}
+      >
+        <Typography variant="h6" gutterBottom>
+          Application
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          General application preferences and behavior settings.
+        </Typography>
+        
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="body1">Real-time updates</Typography>
+            <Box sx={{ px: 2, py: 0.5, backgroundColor: 'success.main', color: 'success.contrastText', borderRadius: 1 }}>
+              <Typography variant="caption">Enabled</Typography>
+            </Box>
+          </Box>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="body1">Vector search</Typography>
+            <Box sx={{ px: 2, py: 0.5, backgroundColor: 'success.main', color: 'success.contrastText', borderRadius: 1 }}>
+              <Typography variant="caption">Enabled</Typography>
+            </Box>
+          </Box>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="body1">Knowledge graph</Typography>
+            <Box sx={{ px: 2, py: 0.5, backgroundColor: 'success.main', color: 'success.contrastText', borderRadius: 1 }}>
+              <Typography variant="caption">Enabled</Typography>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
 }
 
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-    },
-  },
-});
-
-
-
 function App() {
+  const [darkMode, setDarkMode] = useState(false);
+
+  const theme = createTheme({
+    palette: {
+      mode: darkMode ? 'dark' : 'light',
+      primary: {
+        main: '#1976d2',
+      },
+    },
+  });
+
+  const toggleTheme = () => setDarkMode(!darkMode);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            height: '100vh',
-            width: '100vw',
-            overflow: 'hidden'
-          }}
-        >
+        <Box sx={{ display: 'flex', height: '100vh' }}>
+          {/* Sidebar */}
           <Box
             component="nav"
             sx={{
-              width: { xs: '200px', sm: '220px', md: '240px' },
-              minWidth: '180px',
-              background: '#f0f0f0',
-              padding: { xs: '12px', sm: '16px', md: '20px' },
-              borderRight: '1px solid #ddd',
-              overflow: 'auto',
-              flexShrink: 0
+              width: 240,
+              backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
+              borderRight: `1px solid ${darkMode ? '#2c2c2c' : '#e0e0e0'}`,
+              p: 2,
             }}
           >
-            <Typography 
-              variant="h6" 
-              sx={{ 
-                margin: '0 0 20px 0', 
-                color: '#1976d2',
-                fontSize: { xs: '1.1rem', sm: '1.25rem' }
-              }}
-            >
-              FindersKeepers v2
-            </Typography>
-            <Box component="ul" sx={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  📊 Dashboard
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/sessions" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  🤖 Agent Sessions
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/documents" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  📄 Documents
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/search" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  🔍 Vector Search
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/graph" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  🕸️ Knowledge Graph
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/chat" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  💬 AI Chat
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/monitoring" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  📈 System Monitoring
-                </Link>
-              </Box>
-              <Box component="li" sx={{ marginBottom: '10px' }}>
-                <Link to="/settings" style={{ color: '#1976d2', textDecoration: 'none', padding: '8px 0', display: 'block', fontSize: '0.9rem' }}>
-                  ⚙️ Settings
-                </Link>
-              </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                FindersKeepers v2
+              </Typography>
+              <IconButton onClick={toggleTheme} color="primary">
+                {darkMode ? <LightMode /> : <DarkMode />}
+              </IconButton>
+            </Box>
+            
+            <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+              {[
+                { to: '/', label: '📊 Dashboard' },
+                { to: '/sessions', label: '🤖 Agent Sessions' },
+                { to: '/documents', label: '📄 Documents' },
+                { to: '/search', label: '🔍 Vector Search' },
+                { to: '/graph', label: '🕸️ Knowledge Graph' },
+                { to: '/chat', label: '💬 AI Chat' },
+                { to: '/monitoring', label: '📈 System Monitoring' },
+                { to: '/settings', label: '⚙️ Settings' },
+              ].map((item) => (
+                <Box component="li" key={item.to} sx={{ mb: 1 }}>
+                  <Link
+                    to={item.to}
+                    style={{
+                      color: theme.palette.primary.main,
+                      textDecoration: 'none',
+                      padding: '8px 0',
+                      display: 'block',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                </Box>
+              ))}
             </Box>
           </Box>
-          <Box
-            component="main"
-            sx={{
-              flex: 1,
-              padding: { xs: '12px', sm: '16px', md: '20px' },
-              overflow: 'auto',
-              height: '100vh',
-              width: 0 // Forces flex item to shrink properly
-            }}
-          >
+
+          {/* Main content */}
+          <Box sx={{ flex: 1, p: 3, overflow: 'auto' }}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/sessions" element={<AgentSessions />} />
@@ -123,7 +218,7 @@ function App() {
               <Route path="/graph" element={<KnowledgeGraph />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/monitoring" element={<SystemMonitoring />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings" element={<Settings darkMode={darkMode} toggleTheme={toggleTheme} />} />
             </Routes>
           </Box>
         </Box>

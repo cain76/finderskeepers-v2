@@ -17,6 +17,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 import json
+import psutil
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Resource, Tool, Prompt
@@ -43,6 +44,9 @@ redis = RedisClient()
 
 # Global conversation monitor for exit command detection
 conversation_monitor = None
+
+# Parent process monitoring
+parent_process_monitor_task = None
 
 # ========================================
 # TOOLS - Agent-callable functions
@@ -1110,6 +1114,10 @@ async def startup():
         global conversation_monitor
         conversation_monitor = await setup_conversation_monitoring(activity_logger)
         
+        # Start parent process monitoring
+        global parent_process_monitor_task
+        parent_process_monitor_task = asyncio.create_task(monitor_parent_process())
+        
         # Initialize database connections
         await postgres.connect()
         logger.info("✅ PostgreSQL connected")
@@ -1149,6 +1157,15 @@ async def shutdown():
         if conversation_monitor:
             conversation_monitor.stop_monitoring()
             
+        # Stop parent process monitoring
+        global parent_process_monitor_task
+        if parent_process_monitor_task:
+            parent_process_monitor_task.cancel()
+            try:
+                await parent_process_monitor_task
+            except asyncio.CancelledError:
+                pass
+            
         # Log shutdown to n8n
         await activity_logger.shutdown("graceful_shutdown")
         
@@ -1175,6 +1192,42 @@ async def perform_health_check() -> Dict[str, Any]:
     health["timestamp"] = datetime.utcnow().isoformat()
     
     return health
+
+async def monitor_parent_process():
+    """Monitor parent process and shut down if it terminates"""
+    parent_pid = os.getppid()
+    logger.info(f"👁️ Monitoring parent process PID: {parent_pid}")
+    
+    try:
+        while True:
+            try:
+                # Check if parent process still exists
+                if not psutil.pid_exists(parent_pid):
+                    logger.info("🚪 Parent process terminated, shutting down MCP server")
+                    await activity_logger.shutdown("parent_process_terminated")
+                    
+                    # Stop conversation monitoring
+                    global conversation_monitor
+                    if conversation_monitor:
+                        conversation_monitor.stop_monitoring()
+                    
+                    # Disconnect databases
+                    await postgres.disconnect()
+                    await neo4j.disconnect()
+                    await qdrant.disconnect()
+                    await redis.disconnect()
+                    
+                    logger.info("👋 MCP server shutdown complete (parent terminated)")
+                    os._exit(0)  # Force exit since mcp.run() might be stuck
+                    
+            except Exception as e:
+                logger.error(f"Error checking parent process: {e}")
+            
+            # Check every 3 seconds (responsive but not too aggressive)
+            await asyncio.sleep(3)
+            
+    except asyncio.CancelledError:
+        logger.info("👁️ Parent process monitoring cancelled")
 
 if __name__ == "__main__":
     # Run the MCP server

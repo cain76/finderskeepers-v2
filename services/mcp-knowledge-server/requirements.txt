@@ -19,6 +19,7 @@ httpx>=0.26.0            # For FastAPI communication
 pydantic>=2.5.0          # Data validation
 python-dotenv>=1.0.0     # Environment variables
 structlog>=23.2.0        # Structured logging
+psutil>=5.9.0            # Process monitoring
 
 # Development Dependencies (optional)
 # Uncomment for development environment:

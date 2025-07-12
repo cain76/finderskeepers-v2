@@ -15,6 +15,114 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+
+class SessionHeartbeat:
+    """Manages session heartbeat and timeout detection for crash recovery"""
+    
+    def __init__(self, activity_logger, heartbeat_interval: int = 30, timeout_threshold: int = 90):
+        self.activity_logger = activity_logger
+        self.heartbeat_interval = heartbeat_interval  # seconds between heartbeats
+        self.timeout_threshold = timeout_threshold    # seconds before considering session dead
+        self.last_heartbeat = datetime.utcnow()
+        self.heartbeat_task = None
+        self.monitoring_task = None
+        self.running = False
+        
+    async def start_heartbeat(self):
+        """Start the heartbeat monitoring system"""
+        if self.running:
+            return
+            
+        self.running = True
+        self.last_heartbeat = datetime.utcnow()
+        
+        # Start heartbeat sender
+        self.heartbeat_task = asyncio.create_task(self._heartbeat_sender())
+        
+        # Start timeout monitor  
+        self.monitoring_task = asyncio.create_task(self._timeout_monitor())
+        
+        logger.info(f"🫀 Heartbeat monitoring started (interval: {self.heartbeat_interval}s, timeout: {self.timeout_threshold}s)")
+        
+    async def stop_heartbeat(self):
+        """Stop the heartbeat monitoring system"""
+        self.running = False
+        
+        if self.heartbeat_task:
+            self.heartbeat_task.cancel()
+            try:
+                await self.heartbeat_task
+            except asyncio.CancelledError:
+                pass
+                
+        if self.monitoring_task:
+            self.monitoring_task.cancel()
+            try:
+                await self.monitoring_task
+            except asyncio.CancelledError:
+                pass
+                
+        logger.info("💔 Heartbeat monitoring stopped")
+        
+    def update_heartbeat(self):
+        """Update the last heartbeat timestamp (call this on any activity)"""
+        self.last_heartbeat = datetime.utcnow()
+        
+    async def _heartbeat_sender(self):
+        """Send periodic heartbeat signals"""
+        while self.running:
+            try:
+                await asyncio.sleep(self.heartbeat_interval)
+                
+                if not self.running:
+                    break
+                    
+                # Send heartbeat via action logging
+                if self.activity_logger.initialized:
+                    await self.activity_logger.log_action(
+                        action_type="heartbeat",
+                        description="Session heartbeat ping",
+                        details={
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "interval": self.heartbeat_interval
+                        }
+                    )
+                    self.update_heartbeat()
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Heartbeat sender error: {e}")
+                await asyncio.sleep(5)  # Brief delay before retrying
+                
+    async def _timeout_monitor(self):
+        """Monitor for session timeouts and trigger cleanup"""
+        while self.running:
+            try:
+                await asyncio.sleep(10)  # Check every 10 seconds
+                
+                if not self.running:
+                    break
+                    
+                # Check if session has timed out
+                time_since_heartbeat = (datetime.utcnow() - self.last_heartbeat).total_seconds()
+                
+                if time_since_heartbeat > self.timeout_threshold:
+                    logger.warning(f"⏰ Session timeout detected! Last heartbeat: {time_since_heartbeat:.1f}s ago")
+                    
+                    # Trigger session cleanup due to timeout
+                    if self.activity_logger.initialized:
+                        await self.activity_logger.shutdown("timeout_crash_detected")
+                    
+                    self.running = False
+                    break
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Timeout monitor error: {e}")
+                await asyncio.sleep(5)
+
 class ActivityLogger:
     """Logs MCP server activities to n8n workflows"""
     
@@ -24,6 +132,7 @@ class ActivityLogger:
         self.session_id = None
         self.agent_type = "claude-code"
         self.initialized = False
+        self.heartbeat = None  # Will be initialized when session starts
         
     async def initialize(self):
         """Create a new session for this MCP server instance using n8n webhook"""
@@ -72,6 +181,10 @@ class ActivityLogger:
                     
                     self.initialized = True
                     logger.info(f"✅ MCP session created via n8n webhook: {self.session_id}")
+                    
+                    # Initialize heartbeat monitoring for crash detection
+                    self.heartbeat = SessionHeartbeat(self)
+                    await self.heartbeat.start_heartbeat()
                     
                     # Get current project context immediately after session creation
                     await self.retrieve_current_context()
@@ -153,6 +266,10 @@ class ActivityLogger:
         if not self.initialized or not self.session_id:
             return  # Skip logging if not initialized
             
+        # Update heartbeat on any activity (except heartbeat actions to avoid recursion)
+        if self.heartbeat and action_type != "heartbeat":
+            self.heartbeat.update_heartbeat()
+            
         try:
             action_data = {
                 "session_id": self.session_id,
@@ -223,8 +340,8 @@ class ActivityLogger:
             error_message=str(error)
         )
     
-    async def shutdown(self):
-        """Log server shutdown and mark session as ended"""
+    async def shutdown(self, reason: str = "graceful_shutdown"):
+        """Log server shutdown and mark session as ended with fallback"""
         
         if self.initialized and self.session_id:
             try:
@@ -234,31 +351,23 @@ class ActivityLogger:
                     description="MCP Knowledge Server shutting down",
                     details={
                         "shutdown_time": datetime.utcnow().isoformat(),
-                        "session_duration": "calculated_by_n8n",
-                        "graceful_shutdown": True
+                        "shutdown_reason": reason,
+                        "graceful_shutdown": reason in ["graceful_shutdown", "user_exit", "sigterm"]
                     }
                 )
                 
-                # Mark session as ended via n8n webhook
-                session_end_data = {
-                    "session_id": self.session_id,
-                    "status": "ended",
-                    "end_time": datetime.utcnow().isoformat(),
-                    "reason": "graceful_shutdown"
-                }
+                # Stop heartbeat monitoring first
+                if self.heartbeat:
+                    await self.heartbeat.stop_heartbeat()
+                    self.heartbeat = None
                 
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.n8n_webhook_url}/webhook/session-end",
-                        json=session_end_data,
-                        timeout=5.0  # Shorter timeout for shutdown
-                    )
-                    
-                    if response.status_code == 200:
-                        logger.info(f"✅ Session {self.session_id} marked as ended")
-                    else:
-                        logger.warning(f"Failed to mark session as ended: {response.status_code}")
-                        
+                # Try to mark session as ended via n8n webhook first
+                webhook_success = await self._try_webhook_session_end(reason)
+                
+                # If webhook fails, use direct database fallback
+                if not webhook_success:
+                    await self._direct_database_session_end(reason)
+                
                 # Mark as no longer initialized to prevent further logging
                 self.initialized = False
                 self.session_id = None
@@ -268,6 +377,58 @@ class ActivityLogger:
                 # Don't let shutdown errors prevent the main shutdown
                 self.initialized = False
                 self.session_id = None
+
+    async def _try_webhook_session_end(self, reason: str) -> bool:
+        """Try to end session via n8n webhook"""
+        try:
+            session_end_data = {
+                "session_id": self.session_id,
+                "status": "ended",
+                "end_time": datetime.utcnow().isoformat(),
+                "reason": reason
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.n8n_webhook_url}/webhook/session-end",
+                    json=session_end_data,
+                    timeout=3.0  # Shorter timeout for faster fallback
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Session {self.session_id} ended via webhook")
+                    return True
+                else:
+                    logger.warning(f"Webhook session end failed: {response.status_code}")
+                    return False
+                    
+        except Exception as e:
+            logger.warning(f"Webhook session end error: {e}")
+            return False
+
+    async def _direct_database_session_end(self, reason: str):
+        """Directly end session in database as fallback"""
+        try:
+            logger.info(f"Using database fallback to end session {self.session_id}")
+            
+            # Direct FastAPI call as fallback
+            fastapi_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
+            async with httpx.AsyncClient() as client:
+                response = await client.put(
+                    f"{fastapi_url}/api/diary/sessions/{self.session_id}/end",
+                    json={"reason": reason, "fallback": True},
+                    timeout=10.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Session {self.session_id} ended via database fallback")
+                else:
+                    logger.error(f"Database fallback failed: {response.status_code}")
+                    
+        except Exception as e:
+            logger.error(f"Database fallback error: {e}")
+            # Log this as a critical issue for manual intervention
+            logger.critical(f"MANUAL_INTERVENTION_NEEDED: Session {self.session_id} not properly ended")
 
 # Global activity logger instance
 activity_logger = ActivityLogger()

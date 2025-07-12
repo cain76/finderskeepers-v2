@@ -26,6 +26,7 @@ from database.neo4j_client import Neo4jClient
 from database.qdrant_client import QdrantClient
 from database.redis_client import RedisClient
 from activity_logger import activity_logger
+from conversation_monitor import setup_conversation_monitoring
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,9 @@ postgres = PostgresClient()
 neo4j = Neo4jClient()
 qdrant = QdrantClient()
 redis = RedisClient()
+
+# Global conversation monitor for exit command detection
+conversation_monitor = None
 
 # ========================================
 # TOOLS - Agent-callable functions
@@ -602,6 +606,14 @@ async def log_conversation_message(
             "success": True
         }
         
+        # Check for exit commands in user messages
+        global conversation_monitor
+        if conversation_monitor and message_type == "user_message":
+            exit_detected = await conversation_monitor.process_message(content, message_type)
+            if exit_detected:
+                # Exit was detected and processed, add this to the message details
+                message_data["details"]["exit_command_detected"] = True
+        
         # Call n8n Agent Action Tracker webhook for conversation logging
         import httpx
         async with httpx.AsyncClient() as client:
@@ -1094,6 +1106,10 @@ async def startup():
         # Initialize activity logger for n8n workflow integration
         await activity_logger.initialize()
         
+        # Initialize conversation monitoring for exit command detection
+        global conversation_monitor
+        conversation_monitor = await setup_conversation_monitoring(activity_logger)
+        
         # Initialize database connections
         await postgres.connect()
         logger.info("✅ PostgreSQL connected")
@@ -1128,8 +1144,13 @@ async def shutdown():
     logger.info("🔌 Shutting down FindersKeepers Knowledge MCP Server...")
     
     try:
+        # Stop conversation monitoring
+        global conversation_monitor
+        if conversation_monitor:
+            conversation_monitor.stop_monitoring()
+            
         # Log shutdown to n8n
-        await activity_logger.shutdown()
+        await activity_logger.shutdown("graceful_shutdown")
         
         await postgres.disconnect()
         await neo4j.disconnect()
@@ -1165,11 +1186,24 @@ if __name__ == "__main__":
     
     def signal_handler(signum, frame):
         """Handle termination signals gracefully"""
-        logger.info(f"🛑 Received signal {signum}, shutting down gracefully...")
+        signal_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT" if signum == signal.SIGINT else f"SIG{signum}"
+        logger.info(f"🛑 Received {signal_name} ({signum}), shutting down gracefully...")
         # Run shutdown in a new event loop since we might be in a signal handler
         try:
             import asyncio
-            asyncio.run(shutdown())
+            # Create async shutdown function with signal reason
+            async def signal_shutdown():
+                global conversation_monitor
+                if conversation_monitor:
+                    conversation_monitor.stop_monitoring()
+                await activity_logger.shutdown("signal_termination")
+                await postgres.disconnect()
+                await neo4j.disconnect()
+                await qdrant.disconnect()
+                await redis.disconnect()
+                logger.info("👋 Knowledge server shutdown complete (signal)")
+            
+            asyncio.run(signal_shutdown())
         except Exception as e:
             logger.error(f"Error during signal shutdown: {e}")
         finally:

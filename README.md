@@ -247,10 +247,44 @@ python export_data.py --output /path/to/export.json
 
 ## 🤝 Integration
 
-### MCP Server Compatibility
-- Maintains compatibility with existing MCP tools
-- New endpoints accessible via MCP protocol
-- Seamless integration with Claude Desktop
+### MCP Knowledge Server (New!)
+**One-Command Installation for AI Agents**
+
+```bash
+# Automated installation with all dependencies
+./services/mcp-knowledge-server/install.sh
+
+# For development environment
+./services/mcp-knowledge-server/install.sh --dev
+```
+
+**Features:**
+- 🧠 **Semantic Knowledge Search** - Natural language access to your knowledge base
+- 🔄 **Robust Session Management** - Multi-layer termination with crash recovery  
+- 🚪 **Graceful Exit Commands** - Type `/exit` for clean shutdowns
+- 💓 **Heartbeat Monitoring** - 90-second crash detection
+- 🛡️ **Database Fallback** - Never lose sessions due to webhook failures
+- 📝 **Conversation Tracking** - Complete interaction history
+
+**Claude Code Integration:**
+```json
+{
+  "mcpServers": {
+    "finderskeepers-knowledge": {
+      "command": "/path/to/.venv/bin/python",
+      "args": ["/path/to/src/knowledge_server.py"]
+    }
+  }
+}
+```
+
+**Usage Examples:**
+```
+"Search our knowledge base for Docker GPU setup"
+"What do we know about FastAPI authentication?"  
+"Show me recent agent activity for this project"
+"/exit" # Graceful session termination
+```
 
 ### n8n Workflow Examples
 - Auto-log Claude sessions → Knowledge graph
@@ -272,12 +306,16 @@ python export_data.py --output /path/to/export.json
 
 ## 📋 Roadmap
 
-- [ ] ✅ Docker containerization (COMPLETE)
-- [ ] 🚧 FastAPI backend with diary endpoints (IN PROGRESS)
-- [ ] 📝 n8n workflows for agent automation
-- [ ] 💬 Web chat interface
-- [ ] 📱 Mobile companion app (future)
-- [ ] 🔄 Real-time collaboration features
+- [x] ✅ **Docker containerization** (COMPLETE)
+- [x] ✅ **FastAPI backend with diary endpoints** (COMPLETE)  
+- [x] ✅ **MCP Knowledge Server with robust session management** (COMPLETE)
+- [x] ✅ **Multi-layer session termination & crash recovery** (COMPLETE)
+- [x] ✅ **Automated deployment system** (COMPLETE)
+- [ ] 🚧 **n8n workflows for agent automation** (IN PROGRESS)
+- [ ] 📝 **Web chat interface**
+- [ ] 🤖 **Advanced AI agent coordination**
+- [ ] 📱 **Mobile companion app** (future)
+- [ ] 🔄 **Real-time collaboration features**
 
 ---
 

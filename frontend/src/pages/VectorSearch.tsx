@@ -38,7 +38,9 @@ import {
   FilterList as FilterIcon,
 } from '@mui/icons-material';
 import { qdrantService } from '../services/qdrantService';
+import { mcpKnowledgeService } from '../services/mcpKnowledgeService';
 import type { QdrantSearchResult, QdrantCollection, QdrantPoint } from '../services/qdrantService';
+import type { McpSearchResult, McpSearchResponse } from '../services/mcpKnowledgeService';
 
 interface SearchFilters {
   minSimilarity: number;
@@ -56,9 +58,11 @@ export default function VectorSearch() {
   const [query, setQuery] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [results, setResults] = React.useState<QdrantSearchResult[]>([]);
+  const [mcpResults, setMcpResults] = React.useState<McpSearchResult[]>([]);
   const [searchTime, setSearchTime] = React.useState<number>(0);
   const [collections, setCollections] = React.useState<QdrantCollection[]>([]);
   const [points, setPoints] = React.useState<QdrantPoint[]>([]);
+  const [useMcpSearch, setUseMcpSearch] = React.useState(true); // Use MCP by default
   const [filters, setFilters] = React.useState<SearchFilters>({
     minSimilarity: 0.7,
     maxResults: 20,
@@ -90,17 +94,34 @@ export default function VectorSearch() {
   React.useEffect(() => {
     const loadCollections = async () => {
       try {
-        const [collectionsData, statsData] = await Promise.all([
-          qdrantService.getCollections(),
-          qdrantService.getCollectionStats()
-        ]);
-        
-        setCollections(collectionsData);
-        setCollectionStats(statsData);
-        
-        // Set first collection as default if available
-        if (collectionsData.length > 0) {
-          setFilters(prev => ({ ...prev, selectedCollection: collectionsData[0].name }));
+        if (useMcpSearch) {
+          // Use MCP Knowledge service
+          const [collectionsData, statsData] = await Promise.all([
+            mcpKnowledgeService.getCollections(),
+            mcpKnowledgeService.getCollectionStats()
+          ]);
+          
+          setCollections(collectionsData);
+          setCollectionStats(statsData);
+          
+          // Set first collection as default if available
+          if (collectionsData.length > 0) {
+            setFilters(prev => ({ ...prev, selectedCollection: collectionsData[0].name }));
+          }
+        } else {
+          // Use direct Qdrant service (fallback)
+          const [collectionsData, statsData] = await Promise.all([
+            qdrantService.getCollections(),
+            qdrantService.getCollectionStats()
+          ]);
+          
+          setCollections(collectionsData);
+          setCollectionStats(statsData);
+          
+          // Set first collection as default if available
+          if (collectionsData.length > 0) {
+            setFilters(prev => ({ ...prev, selectedCollection: collectionsData[0].name }));
+          }
         }
       } catch (error) {
         console.error('Failed to load collections:', error);
@@ -108,7 +129,7 @@ export default function VectorSearch() {
     };
     
     loadCollections();
-  }, []);
+  }, [useMcpSearch]);
 
   // Browse collection points
   const browseCollection = async (collectionName: string) => {
@@ -140,17 +161,29 @@ export default function VectorSearch() {
       setLoading(true);
       setBrowseMode(false);
       setPoints([]);
+      setResults([]);
+      setMcpResults([]);
       const startTime = Date.now();
 
-      // For now, we'll implement text search through the backend API
-      // Since direct text-to-vector conversion requires embeddings generation
-      // This would typically be handled by the FastAPI backend
-      
-      // Placeholder: Show message that text search needs backend
-      console.warn('Text search requires backend API integration');
-      
-      // For demonstration, let's browse the collection instead
-      await browseCollection(filters.selectedCollection);
+      if (useMcpSearch) {
+        // Use MCP Knowledge service for real vector search
+        console.log('Performing MCP Knowledge search:', query);
+        
+        const mcpResponse = await mcpKnowledgeService.searchDocuments({
+          query: query.trim(),
+          limit: filters.maxResults,
+          min_score: filters.minSimilarity,
+          project: filters.selectedCollection === 'all' ? undefined : filters.selectedCollection
+        });
+        
+        console.log('MCP search response:', mcpResponse);
+        setMcpResults(mcpResponse.results);
+        
+      } else {
+        // Fallback to direct Qdrant (will show placeholder message)
+        console.warn('Text search requires backend API integration');
+        await browseCollection(filters.selectedCollection);
+      }
       
       const endTime = Date.now();
       setSearchTime(endTime - startTime);
@@ -158,6 +191,7 @@ export default function VectorSearch() {
     } catch (error) {
       console.error('Search failed:', error);
       setResults([]);
+      setMcpResults([]);
     } finally {
       setLoading(false);
     }
@@ -173,7 +207,10 @@ export default function VectorSearch() {
   const clearSearch = () => {
     setQuery('');
     setResults([]);
+    setMcpResults([]);
     setSearchTime(0);
+    setBrowseMode(false);
+    setPoints([]);
   };
 
   // Get similarity color based on score
@@ -221,8 +258,18 @@ export default function VectorSearch() {
             variant="outlined"
           />
           <Chip
-            label={browseMode ? `${points.length} points` : `${results.length} results`}
+            label={browseMode ? `${points.length} points` : useMcpSearch ? `${mcpResults.length} MCP results` : `${results.length} results`}
             variant="outlined"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={useMcpSearch}
+                onChange={(e) => setUseMcpSearch(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Use MCP Search"
           />
         </Box>
       </Box>
@@ -470,6 +517,94 @@ export default function VectorSearch() {
         </Card>
       )}
 
+      {/* MCP Search Results */}
+      {mcpResults.length > 0 && (
+        <Card>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">
+                MCP Knowledge Search Results ({mcpResults.length})
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Found in {searchTime}ms
+              </Typography>
+            </Box>
+
+            <List>
+              {mcpResults.map((result, index) => (
+                <React.Fragment key={result.document_id || index}>
+                  <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', py: 2 }}>
+                    {/* Document Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', mb: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <DocumentIcon sx={{ mr: 1, color: 'primary.main' }} />
+                        <Typography variant="subtitle1" fontWeight="medium">
+                          {result.metadata?.title || result.metadata?.source_file || `Document ${result.document_id}`}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                          icon={<SimilarityIcon />}
+                          label={formatSimilarity(result.score)}
+                          color={getSimilarityColor(result.score) as any}
+                          size="small"
+                        />
+                        {result.metadata?.project && (
+                          <Chip
+                            label={result.metadata.project}
+                            variant="outlined"
+                            size="small"
+                          />
+                        )}
+                        <Chip
+                          label="MCP"
+                          color="secondary"
+                          size="small"
+                          variant="outlined"
+                        />
+                      </Box>
+                    </Box>
+
+                    {/* Document Content */}
+                    <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+                      <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
+                        {highlightText(result.content || 'No content available', query)}
+                      </Typography>
+                    </Paper>
+
+                    {/* Document Metadata */}
+                    {result.metadata && Object.keys(result.metadata).length > 0 && (
+                      <Accordion sx={{ mt: 1 }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Typography variant="body2" color="textSecondary">
+                            Document Metadata
+                          </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Grid container spacing={1}>
+                            {Object.entries(result.metadata).map(([key, value]) => (
+                              <Grid size={{ xs: 12, sm: 6 }} key={key}>
+                                <Typography variant="caption" color="textSecondary">
+                                  {key.replace(/_/g, ' ').toUpperCase()}
+                                </Typography>
+                                <Typography variant="body2">
+                                  {String(value)}
+                                </Typography>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </AccordionDetails>
+                      </Accordion>
+                    )}
+                  </ListItem>
+                  {index < mcpResults.length - 1 && <Divider />}
+                </React.Fragment>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Browse Points */}
       {browseMode && points.length > 0 && (
         <Card>
@@ -552,7 +687,7 @@ export default function VectorSearch() {
       )}
 
       {/* No Results */}
-      {!loading && query && results.length === 0 && (
+      {!loading && query && results.length === 0 && mcpResults.length === 0 && !browseMode && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No documents found matching your search query. Try:
           <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
@@ -565,7 +700,7 @@ export default function VectorSearch() {
       )}
 
       {/* Empty State */}
-      {!loading && !query && results.length === 0 && (
+      {!loading && !query && results.length === 0 && mcpResults.length === 0 && !browseMode && (
         <Card>
           <CardContent sx={{ textAlign: 'center', py: 6 }}>
             <VectorIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
@@ -580,19 +715,31 @@ export default function VectorSearch() {
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
               <Button
                 variant="outlined"
-                onClick={() => setQuery('How to configure Docker')}
+                onClick={() => {
+                  setQuery('How to configure Docker');
+                  // Trigger search automatically
+                  setTimeout(() => performSearch(), 100);
+                }}
               >
                 "How to configure Docker"
               </Button>
               <Button
                 variant="outlined"
-                onClick={() => setQuery('API authentication methods')}
+                onClick={() => {
+                  setQuery('API authentication methods');
+                  // Trigger search automatically
+                  setTimeout(() => performSearch(), 100);
+                }}
               >
                 "API authentication methods"
               </Button>
               <Button
                 variant="outlined"
-                onClick={() => setQuery('troubleshooting guide')}
+                onClick={() => {
+                  setQuery('troubleshooting guide');
+                  // Trigger search automatically
+                  setTimeout(() => performSearch(), 100);
+                }}
               >
                 "troubleshooting guide"
               </Button>

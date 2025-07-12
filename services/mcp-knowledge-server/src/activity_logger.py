@@ -22,7 +22,7 @@ class ActivityLogger:
         self.fastapi_base_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
         self.n8n_webhook_url = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678")
         self.session_id = None
-        self.agent_type = "fk2_mcp_knowledge_server"
+        self.agent_type = "claude-code"
         self.initialized = False
         
     async def initialize(self):
@@ -224,17 +224,50 @@ class ActivityLogger:
         )
     
     async def shutdown(self):
-        """Log server shutdown"""
+        """Log server shutdown and mark session as ended"""
         
         if self.initialized and self.session_id:
-            await self.log_action(
-                action_type="server_shutdown",
-                description="MCP Knowledge Server shutting down",
-                details={
-                    "shutdown_time": datetime.utcnow().isoformat(),
-                    "session_duration": "calculated_by_n8n"
+            try:
+                # Log shutdown action first
+                await self.log_action(
+                    action_type="server_shutdown",
+                    description="MCP Knowledge Server shutting down",
+                    details={
+                        "shutdown_time": datetime.utcnow().isoformat(),
+                        "session_duration": "calculated_by_n8n",
+                        "graceful_shutdown": True
+                    }
+                )
+                
+                # Mark session as ended via n8n webhook
+                session_end_data = {
+                    "session_id": self.session_id,
+                    "status": "ended",
+                    "end_time": datetime.utcnow().isoformat(),
+                    "reason": "graceful_shutdown"
                 }
-            )
+                
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.n8n_webhook_url}/webhook/session-end",
+                        json=session_end_data,
+                        timeout=5.0  # Shorter timeout for shutdown
+                    )
+                    
+                    if response.status_code == 200:
+                        logger.info(f"✅ Session {self.session_id} marked as ended")
+                    else:
+                        logger.warning(f"Failed to mark session as ended: {response.status_code}")
+                        
+                # Mark as no longer initialized to prevent further logging
+                self.initialized = False
+                self.session_id = None
+                
+            except Exception as e:
+                logger.error(f"Error during activity logger shutdown: {e}")
+                # Don't let shutdown errors prevent the main shutdown
+                self.initialized = False
+                self.session_id = None
 
 # Global activity logger instance
 activity_logger = ActivityLogger()

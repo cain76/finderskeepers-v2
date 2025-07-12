@@ -209,7 +209,7 @@ async def search_sessions(
         results = [
             {
                 "session_id": "session_001",
-                "agent_type": "claude",
+                "agent_type": "claude-code",
                 "project": "finderskeepers-v2",
                 "start_time": "2025-07-08T08:00:00Z",
                 "description": "React frontend development session",
@@ -218,7 +218,7 @@ async def search_sessions(
             },
             {
                 "session_id": "session_002",
-                "agent_type": "claude", 
+                "agent_type": "claude-code", 
                 "project": "finderskeepers-v2",
                 "start_time": "2025-07-07T16:00:00Z",
                 "description": "FastAPI endpoint development",

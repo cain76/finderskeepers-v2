@@ -43,6 +43,24 @@ black services/diary-api/
 isort services/diary-api/
 ```
 
+### MCP Session Management
+```bash
+# Clean up stuck MCP Knowledge Server processes
+./scripts/cleanup-mcp-sessions.sh
+
+# Clean up zombie sessions in database (mark old active sessions as ended)
+./scripts/cleanup-zombie-sessions.py --dry-run  # Preview what would be cleaned
+./scripts/cleanup-zombie-sessions.py --max-age 6 --force  # Clean sessions older than 6 hours
+
+# Start MCP Knowledge Server (with proper signal handling)
+cd services/mcp-knowledge-server
+source .venv/bin/activate
+python src/knowledge_server.py
+
+# Stop MCP server gracefully (use Ctrl+C, not kill -9)
+# Server now handles SIGTERM and SIGINT signals properly
+```
+
 ### Database Operations
 ```bash
 # PostgreSQL direct access

@@ -594,6 +594,7 @@ class DocumentQueries:
     ) -> Dict[str, Any]:
         """Get REAL document data from PostgreSQL"""
         try:
+            logger.info(f"DocumentQueries.get_documents called with: page={page}, limit={limit}, search={search}, format={format}, project={project}, tags={tags}")
             async with db_manager.get_postgres_connection() as conn:
                 offset = (page - 1) * limit
                 
@@ -624,6 +625,7 @@ class DocumentQueries:
                 
                 # Get total count
                 count_query = f"SELECT COUNT(*) FROM documents WHERE {' AND '.join(conditions)}"
+                logger.info(f"Count query: {count_query} with params: {params}")
                 total_count = await conn.fetchval(count_query, *params)
                 
                 # Get documents
@@ -655,7 +657,8 @@ class DocumentQueries:
                 
                 documents = await conn.fetch(doc_query, *params)
                 
-                # Get statistics
+                # Get statistics (use original params without limit/offset)
+                stats_params = params[:-2]  # Remove limit and offset parameters
                 stats_query = f"""
                     SELECT 
                         COUNT(*) as total,
@@ -663,25 +666,25 @@ class DocumentQueries:
                         COUNT(DISTINCT doc_type) as format_count,
                         COUNT(DISTINCT project) as project_count
                     FROM documents
-                    WHERE {' AND '.join(conditions[:-2])}  -- Remove limit/offset conditions
+                    WHERE {' AND '.join(conditions)}
                 """
-                stats = await conn.fetchrow(stats_query, *params[:-2])
+                stats = await conn.fetchrow(stats_query, *stats_params)
                 
                 # Get format breakdown
                 format_breakdown = await conn.fetch(f"""
                     SELECT doc_type, COUNT(*) as count
                     FROM documents
-                    WHERE {' AND '.join(conditions[:-2])}
+                    WHERE {' AND '.join(conditions)}
                     GROUP BY doc_type
-                """, *params[:-2])
+                """, *stats_params)
                 
                 # Get project breakdown
                 project_breakdown = await conn.fetch(f"""
                     SELECT project, COUNT(*) as count
                     FROM documents
-                    WHERE {' AND '.join(conditions[:-2])}
+                    WHERE {' AND '.join(conditions)}
                     GROUP BY project
-                """, *params[:-2])
+                """, *stats_params)
                 
                 return {
                     "documents": [

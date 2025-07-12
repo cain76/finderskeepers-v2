@@ -1160,12 +1160,38 @@ if __name__ == "__main__":
     logger.info("🌟 FindersKeepers v2 Knowledge MCP Server")
     logger.info("🔗 Connecting AI agents to universal knowledge...")
     
+    import signal
+    import sys
+    
+    def signal_handler(signum, frame):
+        """Handle termination signals gracefully"""
+        logger.info(f"🛑 Received signal {signum}, shutting down gracefully...")
+        # Run shutdown in a new event loop since we might be in a signal handler
+        try:
+            import asyncio
+            asyncio.run(shutdown())
+        except Exception as e:
+            logger.error(f"Error during signal shutdown: {e}")
+        finally:
+            sys.exit(0)
+    
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
     # Run startup before starting the server
     import asyncio
     asyncio.run(startup())
     
     try:
         mcp.run()
+    except KeyboardInterrupt:
+        logger.info("🛑 KeyboardInterrupt received")
+    except Exception as e:
+        logger.error(f"❌ Server error: {e}")
     finally:
         # Run shutdown on exit
-        asyncio.run(shutdown())
+        try:
+            asyncio.run(shutdown())
+        except Exception as e:
+            logger.error(f"Error during final shutdown: {e}")

@@ -237,51 +237,50 @@ class ApiService {
   // System Health endpoints
   async getSystemHealth(): Promise<ApiResponse<SystemHealth>> {
     try {
-      // Get basic health status
+      // Load only health endpoint for faster response
       const healthResponse = await this.request('/health');
       
-      // Get detailed system stats
-      const statsResponse = await this.request('/api/stats/system');
-      
-      if (healthResponse && statsResponse.success) {
+      if (healthResponse) {
         // Transform the data to match our SystemHealth interface
+        const containerDetails = null; // Skip stats for faster loading
+        
         const transformedHealth: SystemHealth = {
           status: healthResponse.status || 'unknown',
           services: {
             fastapi: {
               status: healthResponse.services?.api || 'unknown',
-              response_time_ms: this.getServiceResponseTime('fk2_fastapi', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_fastapi', statsResponse.data?.containers?.details)
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_fastapi', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_fastapi', containerDetails) : undefined
             },
             postgres: {
               status: healthResponse.services?.postgres || 'unknown', 
-              response_time_ms: this.getServiceResponseTime('fk2_postgres', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_postgres', statsResponse.data?.containers?.details)
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_postgres', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_postgres', containerDetails) : undefined
             },
             neo4j: {
               status: healthResponse.services?.neo4j || 'unknown',
-              response_time_ms: this.getServiceResponseTime('fk2_neo4j', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_neo4j', statsResponse.data?.containers?.details)
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_neo4j', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_neo4j', containerDetails) : undefined
             },
             qdrant: {
               status: healthResponse.services?.qdrant || 'unknown',
-              response_time_ms: this.getServiceResponseTime('fk2_qdrant', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_qdrant', statsResponse.data?.containers?.details)
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_qdrant', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_qdrant', containerDetails) : undefined
             },
             redis: {
               status: healthResponse.services?.redis || 'unknown',
-              response_time_ms: this.getServiceResponseTime('fk2_redis', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_redis', statsResponse.data?.containers?.details)
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_redis', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_redis', containerDetails) : undefined
             },
             ollama: {
               status: healthResponse.services?.ollama || 'unknown',
-              response_time_ms: this.getServiceResponseTime('fk2_ollama', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_ollama', statsResponse.data?.containers?.details)
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_ollama', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_ollama', containerDetails) : undefined
             },
             n8n: {
-              status: this.getContainerStatus('fk2_n8n', statsResponse.data?.containers?.details) || 'unknown',
-              response_time_ms: this.getServiceResponseTime('fk2_n8n', statsResponse.data?.containers?.details),
-              uptime_percentage: this.calculateUptime('fk2_n8n', statsResponse.data?.containers?.details)
+              status: healthResponse.services?.n8n || 'unknown',
+              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_n8n', containerDetails) : undefined,
+              uptime_percentage: containerDetails ? this.calculateUptime('fk2_n8n', containerDetails) : undefined
             }
           },
           local_llm: healthResponse.local_llm,

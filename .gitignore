@@ -35,3 +35,6 @@ docs/resources/langchain-fastapi-integration/
 *investigation*.js
 *debug*.js
 *puppeteer*.js
+
+# Documentation directories (scraped content)
+docs/

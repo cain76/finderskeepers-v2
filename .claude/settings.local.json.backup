@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "fk-knowledge": {
+      "command": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/.venv/bin/python",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/src/knowledge_server.py"
+      ],
+      "cwd": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server",
+      "env": {
+        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2",
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "fk2025neo4j",
+        "QDRANT_URL": "http://localhost:6333",
+        "REDIS_URL": "redis://localhost:6379",
+        "FASTAPI_URL": "http://127.0.0.1:8000",
+        "CRASH_RECOVERY_ENABLED": "true",
+        "BULLETPROOF_MODE": "true",
+        "AUTO_SESSION_LOGGING": "true",
+        "BACKUP_PERSISTENCE": "maximum"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "mcp__fk-knowledge__*",
+      "mcp__brave-search__brave_web_search",
+      "WebFetch(domain:github.com)",
+      "mcp__fk-knowledge__get_full_conversation_context",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker compose:*)",
+      "WebFetch(domain:docs.anthropic.com)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -X POST http://localhost:8000/api/diary/actions -H 'Content-Type: application/json' -d '{\"agent_type\":\"claude-code\",\"user_id\":\"cain\",\"project\":\"finderskeepers-v2\",\"action_type\":\"tool_use\",\"description\":\"{{tool_name}}\",\"details\":\"{{tool_input}}\"}' || true"
+          }
+        ]
+      }
+    ]
+  }
+}

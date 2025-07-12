@@ -1,0 +1,414 @@
+{
+  "model": "sonnet",
+  "permissions": {
+    "allow": [
+      "mcp__supabase_tools__list_extensions",
+      "mcp__supabase_tools__execute_sql",
+      "mcp__supabase_tools__apply_migration",
+      "Bash(gcloud config set:*)",
+      "Bash(gcloud auth application-default set-quota-project:*)",
+      "mcp__gcp_tools__list-projects",
+      "mcp__gcp_tools__run-gcp-code",
+      "mcp__gcp_tools__select-project",
+      "mcp__gcp_tools__get-billing-info",
+      "Bash(gcloud config get-value:*)",
+      "Bash(gcloud services list:*)",
+      "Bash(gcloud iam service-accounts list:*)",
+      "Bash(gcloud projects describe:*)",
+      "Bash(gcloud alpha billing accounts list:*)",
+      "Bash(gcloud services enable:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "mcp__puppeteer_tools__puppeteer_navigate",
+      "mcp__puppeteer_tools__puppeteer_connect_active_tab",
+      "mcp__desktop_commander__write_file",
+      "mcp__desktop_commander__execute_command",
+      "mcp__desktop_commander__edit_block",
+      "mcp__playwright_tools__playwright_navigate",
+      "mcp__playwright_tools__playwright_close",
+      "Bash(npx:*)",
+      "mcp__desktop_commander__read_file",
+      "mcp__playwright_tools__playwright_screenshot",
+      "mcp__playwright_tools__playwright_click",
+      "mcp__playwright_tools__playwright_get_visible_text",
+      "mcp__desktop_commander__search_files",
+      "mcp__playwright_tools__playwright_fill",
+      "mcp__playwright_tools__playwright_console_logs",
+      "mcp__desktop_commander__list_directory",
+      "mcp__desktop_commander__read_output",
+      "mcp__playwright_tools__playwright_evaluate",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(sudo lsof:*)",
+      "Bash(ss:*)",
+      "Bash(kill:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker run:*)",
+      "Bash(docker-compose run:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker port:*)",
+      "Bash(curl:*)",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install)",
+      "Bash(npm test)",
+      "Bash(supabase db push:*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(cat:*)",
+      "Bash(cp:*)",
+      "mcp__filesystem__write_file",
+      "mcp__filesystem__create_directory",
+      "mcp__filesystem__edit_file",
+      "mcp__filesystem__read_file",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "mcp__context7__get-library-docs",
+      "Bash(terraform:*)",
+      "mcp__cf_observability__accounts_list",
+      "mcp__cf_observability__set_active_account",
+      "Bash(mv:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh api:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh secret:*)",
+      "Bash(gh workflow:*)",
+      "mcp__context7__resolve-library-id",
+      "Bash(gh browse:*)",
+      "Bash(python:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm audit:*)",
+      "Bash(pip-audit:*)",
+      "Bash(pip show:*)",
+      "Bash(npm update:*)",
+      "Bash(npm ls:*)",
+      "Bash(alembic:*)",
+      "Bash(PYTHONPATH=. python:*)",
+      "Bash(ping:*)",
+      "mcp__cf_bindings__hyperdrive_configs_list",
+      "Bash(rm:*)",
+      "Bash(npm run lint:*)",
+      "Bash(gh run:*)",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__read_multiple_files",
+      "mcp__filesystem__search_files",
+      "Bash(sed:*)",
+      "mcp__desktop_commander__search_code",
+      "mcp__supabase_tools__get_anon_key",
+      "Bash(rg:*)",
+      "mcp__cloudflare-observability__accounts_list",
+      "mcp__cloudflare-observability__set_active_account",
+      "mcp__cloudflare-observability__workers_list",
+      "mcp__cloudflare-observability__workers_get_worker",
+      "mcp__cloudflare-observability__query_worker_observability",
+      "mcp__supabase__search_docs",
+      "mcp__desktop-commander__create_directory",
+      "mcp__desktop-commander__write_file",
+      "mcp__fetch__get_markdown_summary",
+      "mcp__cloudflare-bindings__search_cloudflare_documentation",
+      "Bash(rsync:*)",
+      "Bash(export:*)",
+      "Bash(hash -r)",
+      "Bash(source ~/.bashrc)",
+      "Bash(pip3 install:*)",
+      "Bash(sudo apt:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(uv add:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run:*)",
+      "WebFetch(domain:docs.astral.sh)",
+      "Bash(uv:*)",
+      "Bash(echo $PATH)",
+      "Bash(make:*)",
+      "Bash(timeout:*)",
+      "Bash(npm run prettier:fix:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(yamllint:*)",
+      "Bash(sudo systemctl stop:*)",
+      "Bash(ln:*)",
+      "Bash(docker logout:*)",
+      "Bash(conda:*)",
+      "Bash(echo:*)",
+      "Bash(kubectl version:*)",
+      "mcp__supabase__list_organizations",
+      "mcp__cf_observability__*",
+      "mcp__cf_bindings__*",
+      "mcp__supabase_tools__*",
+      "mcp__gcp_tools__*",
+      "mcp__puppeteer_tools__*",
+      "mcp__desktop_commander__*",
+      "mcp__playwright_tools__*",
+      "mcp__filesystem__*",
+      "mcp__sequential-thinking__*",
+      "mcp__fetch__*",
+      "mcp__brave-search__*",
+      "mcp__context7__*",
+      "Bash(docker:*)",
+      "Bash(wget:*)",
+      "WebFetch(domain:docs.docker.com)",
+      "Bash(sudo pkill:*)",
+      "Bash(node:*)",
+      "mcp__think-mcp__think",
+      "mcp__n8n__*",
+      "Bash(systemctl:*)",
+      "Bash(xdotool search:*)",
+      "Bash(xwininfo:*)",
+      "mcp__desktop_commander__list_sessions",
+      "mcp__filesystem__list_allowed_directories",
+      "Bash(git clone:*)",
+      "Bash(git submodule:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(gh repo create:*)",
+      "Bash(gh auth:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(npm view:*)",
+      "Bash(jq:*)",
+      "Bash(git checkout:*)",
+      "Bash(env)",
+      "Bash(source:*)",
+      "Bash(npm run deploy:*)",
+      "Bash(wrangler pages deploy:*)",
+      "mcp__puppeteer_tools__puppeteer_screenshot",
+      "mcp__cloudflare-observability__search_cloudflare_documentation",
+      "Bash(.venv/bin/python:*)",
+      "Bash(.venv/bin/pip:*)",
+      "mcp__filesystem__get_file_info",
+      "Bash(safety check)",
+      "mcp__desktop-commander__execute_command",
+      "mcp__desktop-commander__force_terminate",
+      "mcp__desktop-commander__read_file",
+      "mcp__desktop-commander__edit_block",
+      "WebFetch(domain:docs.crawl4ai.com)",
+      "mcp__crawl4ai__crawl4ai_scrape",
+      "mcp__crawl4ai__crawl4ai_map",
+      "mcp__crawl4ai__crawl4ai_extract",
+      "mcp__crawl4ai__crawl4ai_batch",
+      "mcp__puppeteer_tools__puppeteer_click",
+      "mcp__puppeteer_tools__puppeteer_evaluate",
+      "mcp__desktop-commander__list_directory",
+      "mcp__desktop-commander__search_code",
+      "Bash(git reset:*)",
+      "mcp__filesystem__move_file",
+      "Bash(fk help:*)",
+      "Bash(fk-stats)",
+      "WebFetch(domain:localhost)",
+      "Bash(sudo docker:*)",
+      "mcp__kubernetes__*",
+      "Bash(groups)",
+      "Bash(newgrp:*)",
+      "Bash(code:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git rebase:*)",
+      "Bash(git filter-branch:*)",
+      "mcp__n8n__tools_documentation",
+      "mcp__n8n__search_nodes",
+      "mcp__n8n__list_nodes",
+      "mcp__n8n__get_node_for_task",
+      "mcp__n8n__list_ai_tools",
+      "mcp__n8n__get_node_essentials",
+      "mcp__n8n__search_node_properties",
+      "mcp__n8n__validate_node_minimal",
+      "mcp__n8n__validate_node_operation",
+      "mcp__n8n__validate_workflow",
+      "mcp__n8n__n8n_health_check",
+      "mcp__n8n__n8n_diagnostic",
+      "mcp__puppeteer_tools__puppeteer_fill",
+      "mcp__n8n__n8n_list_workflows",
+      "WebFetch(domain:docs.n8n.io)",
+      "mcp__fk-knowledge__search_documents",
+      "mcp__fk-knowledge__get_project_overview",
+      "mcp__fk-knowledge__get_session_context",
+      "mcp__fk-knowledge__query_knowledge_graph",
+      "mcp__fk-knowledge__analyze_document_similarity",
+      "WebFetch(domain:hub.docker.com)",
+      "WebFetch(domain:qdrant.tech)",
+      "Bash(redis-cli:*)",
+      "Bash(git rm:*)",
+      "Bash(playwright install)",
+      "Bash(sudo npx playwright:*)",
+      "Bash(npm create:*)",
+      "Bash(claude mcp:*)",
+      "mcp__desktop-commander__read_output",
+      "Bash(sudo netstat:*)",
+      "mcp__fk-knowledge__get_full_conversation_context",
+      "mcp__fk-knowledge__initialize_claude_session",
+      "Bash(time curl:*)",
+      "Bash(claude config --info)",
+      "Bash(docker compose:*)",
+      "Bash(docker inspect:*)"
+    ],
+    "deny": [
+      "*"
+    ]
+  },
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/home",
+        "/media/cain/linux_storage"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "taskmaster-ai": {
+      "command": "npx",
+      "args": [
+        "taskmaster-ai"
+      ]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "@supabase/mcp-server-supabase@latest"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://ljgqywzgyqqorzykapfp.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqZ3F5d3pneXFxb3J6eWthcGZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI5NTA3NjEsImV4cCI6MjA1ODUyNjc2MX0.c7OXgrBxVBBK2aPTBR6V_fuMaDfhTSNc9grkIm94xDw"
+      }
+    },
+    "gcp-tools": {
+      "command": "npx",
+      "args": [
+        "@sk-google-cloud-mcp-server/server"
+      ]
+    },
+    "playwright-tools": {
+      "command": "npx",
+      "args": [
+        "playwright-mcp-server"
+      ]
+    },
+    "puppeteer-tools": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-puppeteer"
+      ]
+    },
+    "desktop-commander": {
+      "command": "npx",
+      "args": [
+        "desktop-commander"
+      ]
+    },
+    "cloudflare-bindings": {
+      "command": "npx",
+      "args": [
+        "@cloudflare/mcp-server-cloudflare"
+      ]
+    },
+    "cloudflare-observability": {
+      "command": "npx",
+      "args": [
+        "@cloudflare/mcp-server-cloudflare"
+      ]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "BSAomC2D07-YMgcFrMPAMQOpCMCI0CP"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-fetch"
+      ]
+    },
+    "n8n": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "n8n-mcp"
+      ],
+      "env": {
+        "N8N_API_URL": "http://localhost:5678",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3MmUyNTRkMi0yZjE5LTQ3ODgtYWY5MC1mOWRlMzM5MzM1NDciLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUxNjk0NzU0fQ.qXq0PAm3Hx5RdX3QMbiiDcdImrT6IVpimoc3MHNkkNk"
+      }
+    },
+    "kubernetes": {
+      "command": "node",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/node_modules/mcp-server-kubernetes/dist/index.js"
+      ],
+      "env": {
+        "KUBECONFIG": "/home/cain/.kube/config"
+      }
+    },
+    "fk-knowledge": {
+      "command": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/.venv/bin/python",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server/src/knowledge_server.py"
+      ],
+      "cwd": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-knowledge-server",
+      "env": {
+        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2",
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "fk2025neo4j",
+        "QDRANT_URL": "http://localhost:6333",
+        "REDIS_URL": "redis://localhost:6379",
+        "FASTAPI_URL": "http://127.0.0.1:8000",
+        "CRASH_RECOVERY_ENABLED": "true",
+        "BULLETPROOF_MODE": "true",
+        "AUTO_SESSION_LOGGING": "true",
+        "BACKUP_PERSISTENCE": "maximum"
+      }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -X POST http://localhost:8000/api/diary/actions -H 'Content-Type: application/json' -d '{\"agent_type\":\"claude-code\",\"user_id\":\"cain\",\"project\":\"finderskeepers-v2\",\"action_type\":\"tool_use\",\"description\":\"{{tool_name}}\",\"details\":{{tool_input}}}' || true"
+          }
+        ]
+      }
+    ]
+  }
+}

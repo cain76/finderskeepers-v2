@@ -8,6 +8,7 @@ import asyncio
 import httpx
 import logging
 import json
+import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
@@ -18,8 +19,8 @@ class ActivityLogger:
     """Logs MCP server activities to n8n workflows"""
     
     def __init__(self):
-        self.fastapi_base_url = "http://fk2_fastapi:8000"
-        self.n8n_webhook_url = "http://fk2_n8n:5678"
+        self.fastapi_base_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
+        self.n8n_webhook_url = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678")
         self.session_id = None
         self.agent_type = "fk2_mcp_knowledge_server"
         self.initialized = False

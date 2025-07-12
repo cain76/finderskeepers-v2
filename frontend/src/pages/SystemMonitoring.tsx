@@ -17,6 +17,8 @@ import {
   TableHead,
   TableRow,
   Alert,
+  CircularProgress,
+  Fade,
 } from '@mui/material';
 import {
   CheckCircle as HealthyIcon,
@@ -25,6 +27,7 @@ import {
   Refresh as RefreshIcon,
   MonitorHeart as MonitorIcon,
   Psychology as OllamaIcon,
+  Sync as SyncIcon,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -59,12 +62,27 @@ interface PerformanceMetrics {
   active_connections: number;
 }
 
+interface LoadingStates {
+  initial: boolean;
+  health: boolean;
+  services: boolean;
+  performance: boolean;
+  manual: boolean;
+}
+
 export default function SystemMonitoring() {
   const [systemHealth, setSystemHealth] = React.useState<SystemHealth | null>(null);
   const [services, setServices] = React.useState<ServiceStatus[]>([]);
   const [performanceData, setPerformanceData] = React.useState<PerformanceMetrics[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState<LoadingStates>({
+    initial: true,
+    health: false,
+    services: false,
+    performance: false,
+    manual: false,
+  });
   const [lastUpdate, setLastUpdate] = React.useState<string>('');
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const { subscribe } = useWebSocket();
 
@@ -78,56 +96,133 @@ export default function SystemMonitoring() {
     return unsubscribe;
   }, [subscribe]);
 
-  // Load system health
-  const loadSystemHealth = async () => {
+  // Update specific loading state
+  const updateLoading = (key: keyof LoadingStates, value: boolean) => {
+    setLoading(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Load system health with caching and timeout
+  const loadSystemHealth = async (isManual = false) => {
     try {
-      setLoading(true);
-      
-      const healthResponse = await apiService.getSystemHealth();
-      if (healthResponse.success && healthResponse.data) {
-        setSystemHealth(healthResponse.data);
-        
-        // Transform services data
-        const servicesData: ServiceStatus[] = [];
-        if (healthResponse.data.services) {
-          Object.entries(healthResponse.data.services).forEach(([name, serviceInfo]: [string, any]) => {
-            servicesData.push({
-              name: name.toUpperCase(),
-              status: typeof serviceInfo === 'string' ? serviceInfo as any : serviceInfo.status,
-              uptime_percentage: serviceInfo.uptime_percentage,
-              response_time_ms: serviceInfo.response_time_ms,
-              last_check: serviceInfo.last_check,
-              details: serviceInfo.details,
-            });
-          });
-        }
-        setServices(servicesData);
-        
-        // Generate sample performance data
-        const now = new Date();
-        const sampleData = Array.from({ length: 24 }, (_, i) => ({
-          timestamp: new Date(now.getTime() - (23 - i) * 60 * 60 * 1000).toLocaleTimeString(),
-          cpu_usage: Math.random() * 100,
-          memory_usage: Math.random() * 100,
-          response_time: 100 + Math.random() * 200,
-          active_connections: Math.floor(Math.random() * 50),
-        }));
-        setPerformanceData(sampleData);
+      if (isManual) {
+        setIsRefreshing(true);
+        updateLoading('manual', true);
+      } else {
+        updateLoading('health', true);
       }
       
-      setLastUpdate(new Date().toLocaleTimeString());
+      // Set a timeout for the API call
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      try {
+        const healthResponse = await Promise.race([
+          apiService.getSystemHealth(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Health check timeout')), 10000)
+          )
+        ]) as any;
+        
+        clearTimeout(timeoutId);
+        
+        if (healthResponse.success && healthResponse.data) {
+          setSystemHealth(healthResponse.data);
+          
+          // Transform services data asynchronously  
+          setTimeout(() => {
+            const servicesData: ServiceStatus[] = [];
+            if (healthResponse.data.services) {
+              Object.entries(healthResponse.data.services).forEach(([name, serviceInfo]: [string, any]) => {
+                servicesData.push({
+                  name: name.toUpperCase(),
+                  status: serviceInfo.status || serviceInfo || 'unknown',
+                  uptime_percentage: serviceInfo.uptime_percentage,
+                  response_time_ms: serviceInfo.response_time_ms,
+                  last_check: serviceInfo.last_check,
+                  details: serviceInfo.details,
+                });
+              });
+            }
+            setServices(servicesData);
+          }, 0);
+        }
+        
+        setLastUpdate(new Date().toLocaleTimeString());
+      } catch (timeoutError) {
+        clearTimeout(timeoutId);
+        console.error('Health check timeout or failed:', timeoutError);
+        // Set basic fallback data
+        setSystemHealth({
+          status: 'unknown',
+          services: {},
+          last_check: new Date().toISOString()
+        } as SystemHealth);
+      }
     } catch (error) {
       console.error('Failed to load system health:', error);
     } finally {
-      setLoading(false);
+      updateLoading('health', false);
+      if (isManual) {
+        updateLoading('manual', false);
+        setIsRefreshing(false);
+      }
     }
   };
 
+  // Load performance data separately
+  const loadPerformanceData = async () => {
+    try {
+      updateLoading('performance', true);
+      
+      // Generate sample performance data
+      const now = new Date();
+      const sampleData = Array.from({ length: 24 }, (_, i) => ({
+        timestamp: new Date(now.getTime() - (23 - i) * 60 * 60 * 1000).toLocaleTimeString(),
+        cpu_usage: Math.random() * 100,
+        memory_usage: Math.random() * 100,
+        response_time: 100 + Math.random() * 200,
+        active_connections: Math.floor(Math.random() * 50),
+      }));
+      setPerformanceData(sampleData);
+    } catch (error) {
+      console.error('Failed to load performance data:', error);
+    } finally {
+      updateLoading('performance', false);
+    }
+  };
+
+  // Initial load with progressive enhancement
   React.useEffect(() => {
-    loadSystemHealth();
+    const initialize = async () => {
+      updateLoading('initial', true);
+      
+      // Load health data first (faster)
+      await loadSystemHealth();
+      updateLoading('initial', false);
+      
+      // Load performance data in background
+      loadPerformanceData();
+    };
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadSystemHealth, 30000);
+    initialize();
+  }, []);
+
+  // Auto-refresh system health (background updates)
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      // Only refresh health data, not the entire UI
+      loadSystemHealth(false);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Refresh performance data less frequently
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      loadPerformanceData();
+    }, 60000); // Every minute
+    
     return () => clearInterval(interval);
   }, []);
 
@@ -172,7 +267,9 @@ export default function SystemMonitoring() {
   };
 
   const getOverallHealthStatus = () => {
-    if (!systemHealth) return { status: 'unknown', color: 'default' };
+    if (!systemHealth) {
+      return { status: 'unknown', color: 'default' };
+    }
     
     if (systemHealth.status === 'healthy') {
       return { status: 'All Systems Operational', color: 'success' };
@@ -181,7 +278,15 @@ export default function SystemMonitoring() {
     }
   };
 
-  if (loading) {
+  const handleManualRefresh = () => {
+    Promise.all([
+      loadSystemHealth(true),
+      loadPerformanceData()
+    ]);
+  };
+
+  // Show initial loading only on first load
+  if (loading.initial) {
     return (
       <Box sx={{ width: '100%', mt: 2 }}>
         <LinearProgress />
@@ -202,15 +307,24 @@ export default function SystemMonitoring() {
           System Monitoring
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Fade in={loading.health}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SyncIcon fontSize="small" color="action" />
+              <Typography variant="body2" color="textSecondary">
+                Updating...
+              </Typography>
+            </Box>
+          </Fade>
           <Typography variant="body2" color="textSecondary">
             Last updated: {lastUpdate}
           </Typography>
           <Button
             variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={loadSystemHealth}
+            startIcon={isRefreshing ? <CircularProgress size={16} /> : <RefreshIcon />}
+            onClick={handleManualRefresh}
+            disabled={loading.manual}
           >
-            Refresh
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
         </Box>
       </Box>
@@ -270,6 +384,15 @@ export default function SystemMonitoring() {
             </Card>
           </Grid>
         ))}
+        
+        {/* Loading state for services */}
+        {loading.services && (
+          <Grid size={{ xs: 12 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          </Grid>
+        )}
       </Grid>
 
       {/* Performance Charts */}
@@ -277,9 +400,14 @@ export default function SystemMonitoring() {
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                System Resource Usage (24h)
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  System Resource Usage (24h)
+                </Typography>
+                {loading.performance && (
+                  <CircularProgress size={20} />
+                )}
+              </Box>
               <Box sx={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
                   <AreaChart data={performanceData}>
@@ -314,9 +442,14 @@ export default function SystemMonitoring() {
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                API Response Times (24h)
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  API Response Times (24h)
+                </Typography>
+                {loading.performance && (
+                  <CircularProgress size={20} />
+                )}
+              </Box>
               <Box sx={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
                   <LineChart data={performanceData}>
@@ -448,7 +581,7 @@ export default function SystemMonitoring() {
             </Table>
           </TableContainer>
 
-          {services.length === 0 && (
+          {services.length === 0 && !loading.services && (
             <Alert severity="info" sx={{ mt: 2 }}>
               No detailed service information available.
             </Alert>

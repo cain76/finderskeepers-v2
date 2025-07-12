@@ -100,16 +100,27 @@ class StorageService:
         chunks: List[ProcessedChunk]
     ) -> str:
         """
-        Store document and chunks across all databases
+        Store document and chunks across all databases with duplicate detection
         
         Returns:
-            Document ID
+            Document ID (existing if duplicate found, new if unique)
         """
+        # Generate content hash for duplicate detection
+        combined_content = " ".join(chunk.content for chunk in chunks)
+        content_hash = hashlib.sha256(combined_content.encode('utf-8')).hexdigest()
+        
+        # Check for existing document with same content hash
+        existing_doc_id = await self._check_duplicate(content_hash, request.project)
+        if existing_doc_id:
+            logger.info(f"Document with hash {content_hash[:8]}... already exists as {existing_doc_id}")
+            return existing_doc_id
+        
         document_id = str(uuid4())
+        logger.info(f"Storing new document {document_id} with hash {content_hash[:8]}...")
         
         try:
             # Store in PostgreSQL
-            await self._store_in_postgres(document_id, request, metadata, chunks)
+            await self._store_in_postgres(document_id, request, metadata, chunks, content_hash)
             
             # Store embeddings in Qdrant
             if any(chunk.embeddings for chunk in chunks):
@@ -125,13 +136,26 @@ class StorageService:
             logger.error(f"Failed to store document: {e}")
             # Consider rollback logic here
             raise
+    
+    async def _check_duplicate(self, content_hash: str, project: str) -> Optional[str]:
+        """Check if document with same content hash already exists"""
+        await self._ensure_pg_pool()
+        
+        async with self._pg_pool.acquire() as conn:
+            result = await conn.fetchval("""
+                SELECT id::text FROM documents 
+                WHERE content_hash = $1 AND project = $2
+                LIMIT 1
+            """, content_hash, project)
+            return result
             
     async def _store_in_postgres(
         self,
         document_id: str,
         request: IngestionRequest,
         metadata: DocumentMetadata,
-        chunks: List[ProcessedChunk]
+        chunks: List[ProcessedChunk],
+        content_hash: str
     ):
         """Store document and chunks in PostgreSQL"""
         await self._ensure_pg_pool()
@@ -142,13 +166,14 @@ class StorageService:
                 combined_content = " ".join(chunk.content for chunk in chunks)
                 await conn.execute("""
                     INSERT INTO documents (
-                        id, title, content, project, doc_type,
+                        id, title, content, content_hash, project, doc_type,
                         tags, metadata, embeddings
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """, 
                     document_id,
                     metadata.title,
                     combined_content,
+                    content_hash,
                     request.project,
                     request.metadata.get('doc_type', 'ingested'),
                     request.tags,
@@ -162,7 +187,8 @@ class StorageService:
                         "language": metadata.language,
                         "ingestion_id": request.ingestion_id,
                         "file_size": getattr(request, 'file_size', 0),
-                        "mime_type": getattr(request, 'mime_type', 'text/plain')
+                        "mime_type": getattr(request, 'mime_type', 'text/plain'),
+                        "content_hash": content_hash
                     }),
                     chunks[0].embeddings if chunks and chunks[0].embeddings else None
                 )

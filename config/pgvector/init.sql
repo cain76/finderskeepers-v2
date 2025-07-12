@@ -46,12 +46,14 @@ CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title VARCHAR(500) NOT NULL,
     content TEXT NOT NULL,
+    content_hash VARCHAR(64) NOT NULL, -- SHA-256 hash for duplicate detection
     project VARCHAR(100) NOT NULL,
     doc_type VARCHAR(100) DEFAULT 'general',
     tags TEXT[] DEFAULT '{}',
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(content_hash, project) -- Prevent duplicates per project
 );
 
 -- Document chunks for vector search
@@ -127,6 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_actions_timestamp ON agent_actions(timestam
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(doc_type);
 CREATE INDEX IF NOT EXISTS idx_documents_tags ON documents USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);
 
 -- Vector search index (HNSW for fast approximate nearest neighbor)
 CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding 

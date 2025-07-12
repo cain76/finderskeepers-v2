@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Typography, Box, IconButton } from '@mui/material';
@@ -142,7 +142,24 @@ function Settings({ darkMode, toggleTheme }: { darkMode: boolean; toggleTheme: (
 }
 
 function App() {
-  const [darkMode, setDarkMode] = useState(false);
+  // Load theme preference from localStorage or default to false
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('finderskeepers-theme');
+      return saved === 'dark';
+    } catch {
+      return false;
+    }
+  });
+
+  // Save theme preference to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('finderskeepers-theme', darkMode ? 'dark' : 'light');
+    } catch (error) {
+      console.warn('Failed to save theme preference:', error);
+    }
+  }, [darkMode]);
 
   const theme = createTheme({
     palette: {

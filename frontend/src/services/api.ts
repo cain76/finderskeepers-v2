@@ -187,6 +187,19 @@ class ApiService {
     });
   }
 
+  async searchDocuments(params: {
+    query: string;
+    limit?: number;
+    project?: string;
+  }): Promise<ApiResponse<Document[]>> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('search', params.query);
+    if (params.limit) searchParams.append('limit', params.limit.toString());
+    if (params.project) searchParams.append('project', params.project);
+    
+    return this.request(`/api/stats/documents?${searchParams}`);
+  }
+
   // Vector Search endpoints
   async vectorSearch(query: SearchQuery): Promise<ApiResponse<VectorSearchResult[]>> {
     return this.request('/api/search/vector', {
@@ -230,7 +243,7 @@ class ApiService {
   async queryKnowledgeGraph(query: string): Promise<ApiResponse<{ nodes: GraphNode[]; edges: GraphEdge[] }>> {
     return this.request('/api/knowledge/query', {
       method: 'POST',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ question: query }),
     });
   }
 

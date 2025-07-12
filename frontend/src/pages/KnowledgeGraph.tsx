@@ -37,7 +37,7 @@ import {
 } from '@xyflow/react';
 import type { Node, Edge, NodeTypes } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { neo4jService } from '../services/neo4jService';
+import { apiService } from '../services/api';
 import type { Neo4jNode, Neo4jRelationship } from '../services/neo4jService';
 
 interface KnowledgeGraphNode extends Node {
@@ -150,60 +150,157 @@ export default function KnowledgeGraph() {
     try {
       setLoading(true);
       
-      // Load graph data from Neo4j
-      const graphData = await neo4jService.getGraphData(100);
+      // Load graph data from API
+      console.log('Loading graph data from API...');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/knowledge/graph?limit=50`);
       
-      if (graphData.nodes && graphData.relationships) {
-        // Convert Neo4j data to React Flow format
-        const flowNodes: KnowledgeGraphNode[] = graphData.nodes.map((node: Neo4jNode) => {
-          const nodeType = node.labels.includes('Document') ? 'document' : 
-                          node.labels.includes('Session') ? 'session' : 
-                          node.labels.includes('Project') ? 'project' : 'entity';
-          
-          return {
-            id: node.id,
-            type: nodeType,
-            position: {
-              x: Math.random() * 600,
-              y: Math.random() * 400,
-            },
-            data: {
-              label: node.properties.title || node.properties.name || node.properties.session_id || `${nodeType}_${node.id}`,
-              type: nodeType,
-              properties: node.properties,
-              size: 1, // We could calculate this based on relationship count
-            },
+      if (response.ok) {
+        const apiData = await response.json();
+        console.log('API response received:', apiData);
+        
+        // If the API returns proper graph data, use it
+        if (apiData.success && apiData.data && apiData.data.nodes && apiData.data.relationships) {
+          const graphData = {
+            nodes: apiData.data.nodes,
+            edges: apiData.data.relationships
           };
-        });
+          
+          // Convert API data to React Flow format
+          const flowNodes: KnowledgeGraphNode[] = graphData.nodes.map((node: any) => {
+            const nodeType = node.labels.includes('Document') ? 'document' : 
+                            node.labels.includes('Session') ? 'session' : 
+                            node.labels.includes('Project') ? 'project' : 'entity';
+            
+            // Parse properties if they're JSON strings
+            let properties = node.properties || {};
+            if (typeof properties === 'string') {
+              try {
+                properties = JSON.parse(properties);
+              } catch (e) {
+                console.warn('Failed to parse node properties:', e);
+                properties = {};
+              }
+            }
+            
+            return {
+              id: node.id,
+              type: nodeType,
+              position: {
+                x: Math.random() * 600,
+                y: Math.random() * 400,
+              },
+              data: {
+                label: properties?.title || properties?.name || properties?.session_id || `${nodeType}_${node.id}`,
+                type: nodeType,
+                properties: properties,
+                size: 1,
+              },
+            };
+          });
 
-        const flowEdges: KnowledgeGraphEdge[] = graphData.relationships.map((rel: Neo4jRelationship) => ({
-          id: rel.id,
-          source: rel.startNode,
-          target: rel.endNode,
-          type: 'default',
-          animated: rel.type === 'CONTAINS' || rel.type === 'RELATES_TO',
-          data: {
-            relationship: rel.type,
-            properties: rel.properties,
-          },
-          label: rel.type,
-        }));
+          const flowEdges: KnowledgeGraphEdge[] = graphData.edges.map((rel: any) => ({
+            id: rel.id,
+            source: rel.startNode,
+            target: rel.endNode,
+            type: 'default',
+            animated: rel.type === 'CONTAINS' || rel.type === 'RELATES_TO',
+            data: {
+              relationship: rel.type,
+              properties: rel.properties || {},
+            },
+            label: rel.type,
+          }));
 
-        setNodes(flowNodes);
-        setEdges(flowEdges);
+          setNodes(flowNodes);
+          setEdges(flowEdges);
 
-        // Calculate stats
-        const nodeTypeCounts = flowNodes.reduce((acc, node) => {
-          acc[node.data.type] = (acc[node.data.type] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
+          // Calculate stats
+          const nodeTypeCounts = flowNodes.reduce((acc, node) => {
+            acc[node.data.type] = (acc[node.data.type] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
 
-        setGraphStats({
-          totalNodes: flowNodes.length,
-          totalEdges: flowEdges.length,
-          nodeTypes: nodeTypeCounts,
-        });
+          setGraphStats({
+            totalNodes: flowNodes.length,
+            totalEdges: flowEdges.length,
+            nodeTypes: nodeTypeCounts,
+          });
+          
+          console.log(`Loaded ${flowNodes.length} nodes and ${flowEdges.length} edges`);
+          return; // Success, exit early
+        }
       }
+      
+      // Try direct API endpoints if queryKnowledgeGraph doesn't work
+      console.log('Trying direct graph API endpoints...');
+      try {
+        const nodesResponse = await apiService.getGraphNodes({ limit: 50 });
+        const edgesResponse = await apiService.getGraphEdges();
+        
+        if (nodesResponse.success && edgesResponse.success) {
+          const nodes = nodesResponse.data || [];
+          const edges = edgesResponse.data || [];
+          
+          // Convert API data to React Flow format
+          const flowNodes: KnowledgeGraphNode[] = nodes.map((node: any) => {
+            const nodeType = node.labels?.includes('Document') ? 'document' : 
+                            node.labels?.includes('Session') ? 'session' : 
+                            node.labels?.includes('Project') ? 'project' : 'entity';
+            
+            return {
+              id: node.id,
+              type: nodeType,
+              position: {
+                x: Math.random() * 600,
+                y: Math.random() * 400,
+              },
+              data: {
+                label: node.properties?.title || node.properties?.name || node.properties?.session_id || `${nodeType}_${node.id}`,
+                type: nodeType,
+                properties: node.properties || {},
+                size: 1,
+              },
+            };
+          });
+
+          const flowEdges: KnowledgeGraphEdge[] = edges.map((rel: any) => ({
+            id: rel.id,
+            source: rel.startNode,
+            target: rel.endNode,
+            type: 'default',
+            animated: rel.type === 'CONTAINS' || rel.type === 'RELATES_TO',
+            data: {
+              relationship: rel.type,
+              properties: rel.properties || {},
+            },
+            label: rel.type,
+          }));
+
+          setNodes(flowNodes);
+          setEdges(flowEdges);
+
+          // Calculate stats
+          const nodeTypeCounts = flowNodes.reduce((acc, node) => {
+            acc[node.data.type] = (acc[node.data.type] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+
+          setGraphStats({
+            totalNodes: flowNodes.length,
+            totalEdges: flowEdges.length,
+            nodeTypes: nodeTypeCounts,
+          });
+          
+          console.log(`Loaded ${flowNodes.length} nodes and ${flowEdges.length} edges from direct API`);
+          return; // Success, exit early
+        }
+      } catch (apiError) {
+        console.warn('Direct API endpoints also failed:', apiError);
+      }
+      
+      // If all API calls fail, show a message instead of mock data
+      throw new Error('Unable to load real graph data from API');
+      
     } catch (error) {
       console.error('Failed to load graph data:', error);
       
@@ -300,12 +397,12 @@ export default function KnowledgeGraph() {
     try {
       setLoading(true);
       
-      // Search documents using Neo4j service
-      const searchResults = await neo4jService.searchDocuments(searchQuery, 20);
+      // Search documents using API service
+      const searchResults = await apiService.searchDocuments({ query: searchQuery, limit: 20 });
       
-      if (searchResults.length > 0) {
+      if (searchResults.success && searchResults.data && searchResults.data.length > 0) {
         // Convert search results to graph format
-        const searchNodes: KnowledgeGraphNode[] = searchResults.map((doc: any) => ({
+        const searchNodes: KnowledgeGraphNode[] = searchResults.data.map((doc: any) => ({
           id: doc.id,
           type: 'document',
           position: {
@@ -319,34 +416,35 @@ export default function KnowledgeGraph() {
               title: doc.title,
               content: doc.content,
               project: doc.project,
-              docType: doc.docType,
-              createdAt: doc.createdAt,
+              docType: doc.doc_type,
+              createdAt: doc.created_at,
             },
             size: 1,
           },
         }));
 
-        // Get relationships for search results
+        // Create simple relationships between documents in the same project
         const searchEdges: KnowledgeGraphEdge[] = [];
-        for (const doc of searchResults.slice(0, 5)) { // Limit to first 5 for performance
-          try {
-            const relationshipData = await neo4jService.getDocumentRelationships(doc.id);
-            relationshipData.relationships.forEach((rel: Neo4jRelationship) => {
+        for (let i = 0; i < searchNodes.length - 1; i++) {
+          for (let j = i + 1; j < searchNodes.length; j++) {
+            const nodeA = searchNodes[i];
+            const nodeB = searchNodes[j];
+            
+            // Create relationship if they're in the same project
+            if (nodeA.data.properties.project === nodeB.data.properties.project) {
               searchEdges.push({
-                id: rel.id,
-                source: rel.startNode,
-                target: rel.endNode,
+                id: `${nodeA.id}-${nodeB.id}`,
+                source: nodeA.id,
+                target: nodeB.id,
                 type: 'default',
-                animated: rel.type === 'CONTAINS' || rel.type === 'RELATES_TO',
+                animated: true,
                 data: {
-                  relationship: rel.type,
-                  properties: rel.properties,
+                  relationship: 'RELATES_TO',
+                  properties: { project: nodeA.data.properties.project },
                 },
-                label: rel.type,
+                label: 'RELATES_TO',
               });
-            });
-          } catch (relError) {
-            console.warn('Failed to load relationships for document:', doc.id, relError);
+            }
           }
         }
 

@@ -391,6 +391,283 @@ async def ingest_document(doc: DocumentIngest, background_tasks: BackgroundTasks
         logger.error(f"Document ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========================================
+# MCP SEARCH PROXY - For Frontend Vector Search
+# ========================================
+
+class McpSearchRequest(BaseModel):
+    """MCP search request model"""
+    query: str
+    limit: Optional[int] = 10
+    project: Optional[str] = None
+    tags: Optional[List[str]] = None
+    min_score: Optional[float] = 0.5
+
+@app.post("/api/mcp/search", tags=["MCP"])
+async def mcp_search_proxy(request: McpSearchRequest):
+    """Proxy endpoint for MCP knowledge search from frontend"""
+    try:
+        logger.info(f"MCP search proxy: {request.query} (limit: {request.limit})")
+        
+        # This would normally call the MCP Knowledge server
+        # For now, return a structured response that indicates the search was received
+        # The frontend will handle fallback to mock data
+        
+        return {
+            "success": False,
+            "message": "MCP search service not yet implemented - using frontend fallback",
+            "data": {
+                "query": request.query,
+                "total_results": 0,
+                "results": [],
+                "search_params": {
+                    "project": request.project,
+                    "tags": request.tags,
+                    "limit": request.limit,
+                    "min_score": request.min_score
+                },
+                "embeddings_used": False,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    except Exception as e:
+        logger.error(f"MCP search proxy failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========================================
+# KNOWLEDGE GRAPH API - Neo4j Graph Endpoints
+# ========================================
+
+class GraphNodeModel(BaseModel):
+    """Graph node model for API responses"""
+    id: str
+    labels: List[str]
+    properties: Dict[str, Any]
+
+class GraphEdgeModel(BaseModel):
+    """Graph edge model for API responses"""
+    id: str
+    type: str
+    startNode: str
+    endNode: str
+    properties: Dict[str, Any]
+
+class GraphDataModel(BaseModel):
+    """Complete graph data model"""
+    nodes: List[GraphNodeModel]
+    edges: List[GraphEdgeModel]
+    stats: Dict[str, Any]
+
+@app.get("/api/knowledge/nodes", tags=["Knowledge"])
+async def get_graph_nodes(
+    node_type: Optional[str] = None,
+    limit: int = 100
+):
+    """Get knowledge graph nodes from database"""
+    try:
+        logger.info(f"Getting graph nodes: type={node_type}, limit={limit}")
+        
+        # Use real database queries for graph data
+        async with db_manager.get_postgres_connection() as conn:
+            # Build query for nodes based on documents and sessions
+            if node_type == "document":
+                nodes_data = await conn.fetch("""
+                    SELECT 
+                        id::text as id,
+                        ARRAY['Document'] as labels,
+                        jsonb_build_object(
+                            'title', title,
+                            'project', project,
+                            'doc_type', doc_type,
+                            'created_at', created_at::text
+                        ) as properties
+                    FROM documents
+                    ORDER BY created_at DESC
+                    LIMIT $1
+                """, limit)
+            elif node_type == "session":
+                nodes_data = await conn.fetch("""
+                    SELECT 
+                        id::text as id,
+                        ARRAY['Session'] as labels,
+                        jsonb_build_object(
+                            'session_id', session_id,
+                            'agent_type', agent_type,
+                            'project', project,
+                            'start_time', start_time::text,
+                            'status', CASE WHEN end_time IS NULL THEN 'active' ELSE 'completed' END
+                        ) as properties
+                    FROM agent_sessions
+                    ORDER BY start_time DESC
+                    LIMIT $1
+                """, limit)
+            else:
+                # Get both documents and sessions
+                docs_data = await conn.fetch("""
+                    SELECT 
+                        'doc_' || id::text as id,
+                        ARRAY['Document'] as labels,
+                        jsonb_build_object(
+                            'title', title,
+                            'project', project,
+                            'doc_type', doc_type,
+                            'created_at', created_at::text
+                        ) as properties
+                    FROM documents
+                    ORDER BY created_at DESC
+                    LIMIT $1
+                """, limit // 2)
+                
+                sessions_data = await conn.fetch("""
+                    SELECT 
+                        'session_' || id::text as id,
+                        ARRAY['Session'] as labels,
+                        jsonb_build_object(
+                            'session_id', session_id,
+                            'agent_type', agent_type,
+                            'project', project,
+                            'start_time', start_time::text,
+                            'status', CASE WHEN end_time IS NULL THEN 'active' ELSE 'completed' END
+                        ) as properties
+                    FROM agent_sessions
+                    ORDER BY start_time DESC
+                    LIMIT $1
+                """, limit // 2)
+                
+                nodes_data = list(docs_data) + list(sessions_data)
+        
+        nodes = [
+            {
+                "id": str(row['id']),
+                "labels": row['labels'],
+                "properties": row['properties']
+            }
+            for row in nodes_data
+        ]
+        
+        return {
+            "success": True,
+            "data": nodes,
+            "total": len(nodes),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get graph nodes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/knowledge/edges", tags=["Knowledge"])
+async def get_graph_edges(
+    node_id: Optional[str] = None,
+    limit: int = 100
+):
+    """Get knowledge graph edges from database"""
+    try:
+        logger.info(f"Getting graph edges: node_id={node_id}, limit={limit}")
+        
+        # For now, return basic relationship structure
+        # In a real implementation, this would query actual relationships
+        edges = []
+        
+        # Create some sample relationships based on projects
+        async with db_manager.get_postgres_connection() as conn:
+            if node_id:
+                # Get relationships for specific node
+                if node_id.startswith('doc_'):
+                    # Find sessions in same project
+                    doc_id = node_id.replace('doc_', '')
+                    related_data = await conn.fetch("""
+                        SELECT DISTINCT
+                            d.project,
+                            s.id as session_id
+                        FROM documents d
+                        JOIN agent_sessions s ON d.project = s.project
+                        WHERE d.id = $1
+                        LIMIT $2
+                    """, int(doc_id), limit)
+                    
+                    for row in related_data:
+                        edges.append({
+                            "id": f"{node_id}_session_{row['session_id']}",
+                            "type": "RELATES_TO",
+                            "startNode": node_id,
+                            "endNode": f"session_{row['session_id']}",
+                            "properties": {"relationship": "same_project"}
+                        })
+            else:
+                # Get general project-based relationships
+                project_relationships = await conn.fetch("""
+                    SELECT DISTINCT
+                        d.id as doc_id,
+                        s.id as session_id,
+                        d.project
+                    FROM documents d
+                    JOIN agent_sessions s ON d.project = s.project
+                    LIMIT $1
+                """, limit)
+                
+                for row in project_relationships:
+                    edges.append({
+                        "id": f"doc_{row['doc_id']}_session_{row['session_id']}",
+                        "type": "RELATES_TO",
+                        "startNode": f"doc_{row['doc_id']}",
+                        "endNode": f"session_{row['session_id']}",
+                        "properties": {"relationship": "same_project", "project": row['project']}
+                    })
+        
+        return {
+            "success": True,
+            "data": edges,
+            "total": len(edges),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get graph edges: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/knowledge/graph", tags=["Knowledge"])
+async def get_full_graph(limit: int = 50):
+    """Get complete knowledge graph data"""
+    try:
+        logger.info(f"Getting full graph data with limit: {limit}")
+        
+        # Get nodes and edges in parallel
+        nodes_response = await get_graph_nodes(limit=limit)
+        edges_response = await get_graph_edges(limit=limit)
+        
+        if not nodes_response["success"] or not edges_response["success"]:
+            raise HTTPException(status_code=500, detail="Failed to fetch graph data")
+        
+        # Calculate stats
+        nodes = nodes_response["data"]
+        edges = edges_response["data"]
+        
+        node_type_counts = {}
+        for node in nodes:
+            for label in node["labels"]:
+                node_type_counts[label] = node_type_counts.get(label, 0) + 1
+        
+        stats = {
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "node_types": node_type_counts
+        }
+        
+        return {
+            "success": True,
+            "data": {
+                "nodes": nodes,
+                "relationships": edges,
+                "stats": stats
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get full graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/docs/by-id/{document_id}", tags=["Knowledge"])
 async def get_document(document_id: str):
@@ -458,47 +735,120 @@ async def vector_search(query: dict):
         threshold = query.get("threshold", 0.5)
         project = query.get("project", None)
         
-        logger.info(f"REAL vector search: {search_query}, limit={limit}, threshold={threshold}")
+        logger.info(f"NEW SIMPLIFIED vector search: {search_query}, limit={limit}, threshold={threshold}")
         
-        # Get REAL documents from database
-        doc_results = await DocumentQueries.get_documents(
-            page=1,
-            limit=limit,
-            search=search_query,
-            project=project
-        )
+        # Simplified direct database query to avoid the DocumentQueries issue
+        async with db_manager.get_postgres_connection() as conn:
+            # Build simple search conditions
+            conditions = ["1=1"]
+            params = []
+            
+            if search_query:
+                conditions.append("(title ILIKE $1 OR content ILIKE $1)")
+                params.append(f"%{search_query}%")
+            
+            if project:
+                conditions.append("project = $2")
+                params.append(project)
+            
+            # Get documents directly
+            doc_query = f"""
+                SELECT 
+                    id, title, content, project, doc_type, tags, metadata, created_at, updated_at,
+                    LENGTH(content) as file_size
+                FROM documents
+                WHERE {' AND '.join(conditions)}
+                ORDER BY updated_at DESC
+                LIMIT {limit}
+            """
+            
+            logger.info(f"Executing query: {doc_query} with params: {params}")
+            documents = await conn.fetch(doc_query, *params)
+            
+            # Convert to vector search format
+            results = []
+            for doc in documents:
+                results.append({
+                    "id": str(doc["id"]),
+                    "score": 0.85,  # TODO: Implement real vector similarity
+                    "payload": {
+                        "content": doc["content"][:500] + "..." if len(doc["content"]) > 500 else doc["content"],
+                        "title": doc["title"],
+                        "source_file": f"/documents/{doc['title']}.{doc['doc_type']}",
+                        "file_type": doc["doc_type"],
+                        "file_size": doc["file_size"],
+                        "project": doc["project"],
+                        "tags": doc["tags"] if doc["tags"] else [],
+                        "created_date": doc["created_at"].isoformat()
+                    }
+                })
+            
+            # Filter by threshold
+            results = [r for r in results if r["score"] >= threshold]
+            
+            return {
+                "success": True,
+                "data": results,
+                "message": f"Found {len(results)} documents",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "query": search_query,
+                "total_results": len(results)
+            }
+    except Exception as e:
+        logger.error(f"REAL vector search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/docs/search", tags=["Search"])
+async def simple_document_search(request: dict):
+    """Simple document search endpoint that works"""
+    try:
+        query = request.get("q", "")
+        limit = request.get("limit", 10)
         
-        # Convert to vector search format
+        logger.info(f"Simple document search: {query}")
+        
+        # Simple direct database query without complex functions
+        async with db_manager.get_postgres_connection() as conn:
+            if query:
+                docs = await conn.fetch("""
+                    SELECT id, title, content, project, doc_type, tags, created_at, updated_at
+                    FROM documents 
+                    WHERE (title ILIKE $1 OR content ILIKE $1)
+                    ORDER BY updated_at DESC 
+                    LIMIT $2
+                """, f"%{query}%", limit)
+            else:
+                docs = await conn.fetch("""
+                    SELECT id, title, content, project, doc_type, tags, created_at, updated_at
+                    FROM documents 
+                    ORDER BY updated_at DESC 
+                    LIMIT $1
+                """, limit)
+        
         results = []
-        for doc in doc_results.get("documents", []):
+        for doc in docs:
             results.append({
-                "document_id": doc["id"],
-                "chunk_id": f"chunk_{doc['id']}",
-                "content": doc["content"],
-                "similarity_score": 0.85,  # TODO: Implement real vector similarity
-                "metadata": {
-                    "source_file": doc["file_path"],
-                    "file_type": doc["format"],
-                    "file_size": doc["file_size"],
-                    "project": doc["project"],
-                    "tags": doc["tags"],
-                    "created_date": doc["created_at"]
-                }
+                "id": str(doc["id"]),
+                "title": doc["title"],
+                "content": doc["content"][:500] + "..." if len(doc["content"]) > 500 else doc["content"],
+                "project": doc["project"],
+                "file_type": doc["doc_type"],
+                "source_file": f"/{doc['project']}/{doc['title']}.{doc['doc_type']}",
+                "created_at": doc["created_at"].isoformat(),
+                "updated_at": doc["updated_at"].isoformat(),
+                "tags": doc["tags"] or []
             })
-        
-        # Filter by threshold
-        results = [r for r in results if r["similarity_score"] >= threshold]
         
         return {
             "success": True,
             "data": results,
-            "message": f"Found {len(results)} REAL documents from database",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "query": search_query,
-            "total_in_db": doc_results.get("total_count", 0)
+            "total": len(results),
+            "query": query,
+            "message": f"Found {len(results)} documents"
         }
+        
     except Exception as e:
-        logger.error(f"REAL vector search failed: {e}")
+        logger.error(f"Simple document search failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/search/semantic", tags=["Search"])

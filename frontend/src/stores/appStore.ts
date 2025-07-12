@@ -1,7 +1,7 @@
 // FindersKeepers v2 - Main Application Store
 
 import { create } from 'zustand';
-import { devtools, subscribeWithSelector } from 'zustand/middleware';
+import { devtools, subscribeWithSelector, persist } from 'zustand/middleware';
 import type { 
   DashboardState, 
   AppConfig, 
@@ -127,8 +127,9 @@ const initialState = {
 
 export const useAppStore = create<AppState>()(
   devtools(
-    subscribeWithSelector((set) => ({
-      ...initialState,
+    persist(
+      subscribeWithSelector((set) => ({
+        ...initialState,
       
       setConfig: (config) =>
         set((state) => ({
@@ -199,13 +200,17 @@ export const useAppStore = create<AppState>()(
       reset: () =>
         set(initialState, false, 'reset'),
     })),
+      {
+        name: 'finderskeepers-app-store',
+        partialize: (state: AppState) => ({
+          config: state.config,
+          theme: state.theme,
+          dashboard: state.dashboard,
+        }),
+      }
+    ),
     {
-      name: 'finderskeepers-app-store',
-      partialize: (state: AppState) => ({
-        config: state.config,
-        theme: state.theme,
-        dashboard: state.dashboard,
-      }),
+      name: 'finderskeepers-devtools'
     }
   )
 );

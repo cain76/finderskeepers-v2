@@ -135,6 +135,62 @@ The PostgreSQL schema (`config/pgvector/init.sql`) includes:
 4. **Testing**: Ensure all services are running before running tests
 5. **Database Changes**: Update `config/pgvector/init.sql` for schema changes
 
+## 🚀 Enhanced Session Continuity Workflow
+
+### Starting Your Claude Code Session
+
+**ALWAYS run this first when starting Claude Code:**
+
+```bash
+mcp__fk-knowledge__resume_session()
+```
+
+This will:
+- 🔍 Find your most recent session and load full context
+- 📊 Show you exactly what you were working on
+- 🎯 Provide intelligent next-step recommendations
+- 🆕 Automatically start a new session with complete continuity
+- ⚡ Use cached information for instant results
+
+### Ending Your Claude Code Session
+
+**ALWAYS run this when you're done working:**
+
+```bash
+mcp__fk-knowledge__endsession(reason="work_complete")
+```
+
+This will:
+- ⏳ Wait for all data ingestion to complete (up to 30s)
+- 📤 Export your session context as a searchable document
+- 💾 Prepare resume information for your next session
+- 🔄 Update all databases with final session state
+- 🧹 Perform cleanup verification before shutdown
+
+### Session Management Commands
+
+```bash
+# Quick session resume (uses cache)
+mcp__fk-knowledge__resume_session(quick_summary=true)
+
+# Full context resume (bypasses cache)
+mcp__fk-knowledge__resume_session(quick_summary=false)
+
+# End session with custom reason
+mcp__fk-knowledge__endsession(reason="debugging_complete")
+
+# End session with extended timeout
+mcp__fk-knowledge__endsession(completion_timeout=60)
+```
+
+**Why This Matters:**
+- 🧠 **Perfect Memory**: Never lose context between sessions
+- 🎯 **Intelligent Resumption**: Always know exactly where you left off
+- 📚 **Searchable History**: Every session is fully preserved and searchable
+- 🔄 **Seamless Continuity**: Smooth transition between work sessions
+
+**See `docs/SESSION_CONTINUITY_SYSTEM.md` for complete details.**
+
 ## Key Configuration
 
 ### Service URLs (Local Development)

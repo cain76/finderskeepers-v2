@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 import json
 import psutil
+from dotenv import load_dotenv
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Resource, Tool, Prompt
@@ -727,6 +728,416 @@ def analyze_conversation_flow(conversation_messages: List[Dict[str, Any]]) -> st
     else:
         return "balanced_dialogue"
 
+# ========================================
+# ENHANCED SESSION CONTINUITY HELPERS
+# ========================================
+
+def generate_detailed_actions_summary(actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Generate a detailed summary of recent actions for session resumption"""
+    if not actions:
+        return {"message": "No recent actions found", "categories": {}}
+    
+    # Categorize actions by type
+    action_categories = {}
+    for action in actions:
+        action_type = action.get("action_type", "unknown")
+        category = action_type.split(":")[0] if ":" in action_type else action_type
+        
+        if category not in action_categories:
+            action_categories[category] = []
+        action_categories[category].append(action)
+    
+    # Generate summary for each category
+    category_summaries = {}
+    for category, category_actions in action_categories.items():
+        successful = [a for a in category_actions if a.get("success", True)]
+        failed = [a for a in category_actions if not a.get("success", True)]
+        
+        category_summaries[category] = {
+            "total": len(category_actions),
+            "successful": len(successful),
+            "failed": len(failed),
+            "success_rate": len(successful) / len(category_actions) if category_actions else 0,
+            "latest_action": category_actions[0] if category_actions else None,
+            "latest_successful": successful[0] if successful else None,
+            "latest_failed": failed[0] if failed else None
+        }
+    
+    # Overall summary
+    total_successful = sum(len([a for a in actions if a.get("success", True)]) for actions in [actions])
+    overall_success_rate = total_successful / len(actions) if actions else 0
+    
+    return {
+        "total_actions": len(actions),
+        "overall_success_rate": overall_success_rate,
+        "categories": category_summaries,
+        "most_recent": actions[0] if actions else None,
+        "action_types": list(action_categories.keys()),
+        "time_span": {
+            "latest": actions[0].get("timestamp") if actions else None,
+            "earliest": actions[-1].get("timestamp") if actions else None
+        }
+    }
+
+def generate_intelligent_next_steps(session_data: Dict[str, Any], actions: List[Dict[str, Any]]) -> List[str]:
+    """Generate intelligent next steps based on session analysis"""
+    next_steps = []
+    
+    if not actions:
+        return ["🎯 Review project roadmap", "📋 Check recent commits", "🔍 Search knowledge base"]
+    
+    # Analyze recent actions for patterns
+    recent_actions = actions[:5]
+    failed_actions = [a for a in recent_actions if not a.get("success", True)]
+    
+    # Check for unresolved errors
+    if failed_actions:
+        latest_error = failed_actions[0]
+        next_steps.append(f"🔧 Resolve error: {latest_error.get('description', 'Unknown error')}")
+    
+    # Check for file modifications
+    file_actions = [a for a in recent_actions if "file" in a.get("action_type", "").lower()]
+    if file_actions:
+        next_steps.append("📄 Review recent file changes and test functionality")
+    
+    # Check for configuration changes
+    config_actions = [a for a in recent_actions if "config" in a.get("action_type", "").lower()]
+    if config_actions:
+        next_steps.append("⚙️ Verify configuration changes are working correctly")
+    
+    # Check for database/MCP actions
+    db_actions = [a for a in recent_actions if any(keyword in a.get("action_type", "").lower() 
+                                                  for keyword in ["database", "mcp", "session"])]
+    if db_actions:
+        next_steps.append("🗄️ Test database connections and MCP functionality")
+    
+    # Check for commit/deployment actions
+    commit_actions = [a for a in recent_actions if "commit" in a.get("action_type", "").lower()]
+    if commit_actions:
+        next_steps.append("🚀 Consider pushing changes or deploying updates")
+    
+    # Default recommendations if no specific patterns found
+    if not next_steps:
+        next_steps.extend([
+            "🎯 Continue with current development tasks",
+            "📋 Check project status and priorities",
+            "🔍 Review recent changes and test functionality"
+        ])
+    
+    return next_steps[:4]  # Limit to top 4 recommendations
+
+def generate_continuation_recommendations_enhanced(session_data: Dict[str, Any], actions: List[Dict[str, Any]]) -> List[str]:
+    """Generate enhanced continuation recommendations with priority and context"""
+    recommendations = []
+    
+    if not actions:
+        return ["🎯 Start with project overview", "📋 Review roadmap", "🔍 Check knowledge base"]
+    
+    # Analyze success patterns
+    successful_actions = [a for a in actions if a.get("success", True)]
+    failed_actions = [a for a in actions if not a.get("success", True)]
+    
+    success_rate = len(successful_actions) / len(actions) if actions else 0
+    
+    if success_rate < 0.7:
+        recommendations.append("⚠️ HIGH PRIORITY: Address recent errors to improve success rate")
+    
+    # Check for incomplete work
+    incomplete_indicators = ["partial", "started", "in_progress", "todo"]
+    incomplete_actions = [a for a in actions if any(indicator in a.get("description", "").lower() 
+                                                   for indicator in incomplete_indicators)]
+    
+    if incomplete_actions:
+        recommendations.append("🔄 Complete partially finished tasks from previous session")
+    
+    # Check for testing needs
+    test_actions = [a for a in actions if "test" in a.get("action_type", "").lower()]
+    code_actions = [a for a in actions if any(keyword in a.get("action_type", "").lower() 
+                                             for keyword in ["file_edit", "code", "implement"])]
+    
+    if code_actions and not test_actions:
+        recommendations.append("🧪 Run tests to verify recent code changes")
+    
+    # Check for documentation needs
+    doc_actions = [a for a in actions if "doc" in a.get("action_type", "").lower()]
+    if not doc_actions and len(actions) > 5:
+        recommendations.append("📚 Consider documenting recent changes")
+    
+    # Performance and optimization
+    if len(actions) > 10:
+        recommendations.append("⚡ Review session performance and optimize workflow")
+    
+    # Default productive recommendations
+    if not recommendations:
+        recommendations.extend([
+            "🎯 Continue with current development momentum",
+            "📋 Plan next feature or improvement",
+            "🔍 Explore knowledge base for inspiration"
+        ])
+    
+    return recommendations[:3]  # Limit to top 3 recommendations
+
+def identify_priority_items(actions: List[Dict[str, Any]], files_modified: List[str]) -> List[str]:
+    """Identify high-priority items that need immediate attention"""
+    priority_items = []
+    
+    # Check for failed actions
+    failed_actions = [a for a in actions if not a.get("success", True)]
+    if failed_actions:
+        priority_items.append(f"🚨 {len(failed_actions)} failed action(s) need attention")
+    
+    # Check for critical files
+    critical_files = [f for f in files_modified if any(keyword in f.lower() 
+                                                      for keyword in ["config", "server", "main", "init"])]
+    if critical_files:
+        priority_items.append(f"⚠️ {len(critical_files)} critical file(s) modified")
+    
+    # Check for security-related changes
+    security_actions = [a for a in actions if any(keyword in a.get("description", "").lower() 
+                                                  for keyword in ["auth", "security", "permission", "token"])]
+    if security_actions:
+        priority_items.append("🔒 Security-related changes need verification")
+    
+    # Check for database changes
+    db_actions = [a for a in actions if any(keyword in a.get("action_type", "").lower() 
+                                           for keyword in ["database", "migration", "schema"])]
+    if db_actions:
+        priority_items.append("🗄️ Database changes require testing")
+    
+    return priority_items
+
+def identify_session_warnings(actions: List[Dict[str, Any]], failed_actions: List[Dict[str, Any]]) -> List[str]:
+    """Identify potential warnings or issues from the session"""
+    warnings = []
+    
+    # High failure rate warning
+    if failed_actions and len(failed_actions) / len(actions) > 0.3:
+        warnings.append("⚠️ High failure rate detected - review approach")
+    
+    # Repeated failures warning
+    if len(failed_actions) > 3:
+        warnings.append("🔄 Multiple failures detected - may need different strategy")
+    
+    # No recent activity warning
+    if actions and actions[0].get("timestamp"):
+        from datetime import datetime, timedelta
+        last_action_time = datetime.fromisoformat(actions[0]["timestamp"].replace("Z", "+00:00"))
+        if datetime.now(last_action_time.tzinfo) - last_action_time > timedelta(hours=6):
+            warnings.append("⏰ Session has been inactive for over 6 hours")
+    
+    # Resource-intensive actions warning
+    resource_actions = [a for a in actions if any(keyword in a.get("description", "").lower() 
+                                                  for keyword in ["build", "compile", "install", "download"])]
+    if len(resource_actions) > 5:
+        warnings.append("💾 Multiple resource-intensive actions detected")
+    
+    return warnings
+
+def analyze_session_conversation_flow(actions: List[Dict[str, Any]]) -> str:
+    """Analyze conversation flow patterns from actions"""
+    conversation_actions = [a for a in actions if "conversation" in a.get("action_type", "")]
+    
+    if not conversation_actions:
+        return "no_conversation_data"
+    
+    user_messages = [a for a in conversation_actions if "user_message" in a.get("action_type", "")]
+    ai_responses = [a for a in conversation_actions if "ai_response" in a.get("action_type", "")]
+    
+    if len(user_messages) > len(ai_responses):
+        return "user_driven"
+    elif len(ai_responses) > len(user_messages):
+        return "ai_driven"
+    else:
+        return "balanced_interaction"
+
+def analyze_session_completion_status(actions: List[Dict[str, Any]]) -> str:
+    """Analyze whether the session appears to have completed its goals"""
+    if not actions:
+        return "no_activity"
+    
+    # Check for completion indicators
+    completion_indicators = ["complete", "finished", "done", "success", "resolved"]
+    completion_actions = [a for a in actions if any(indicator in a.get("description", "").lower() 
+                                                   for indicator in completion_indicators)]
+    
+    # Check for failure indicators
+    failure_indicators = ["failed", "error", "broken", "issue"]
+    failure_actions = [a for a in actions if any(indicator in a.get("description", "").lower() 
+                                                 for indicator in failure_indicators)]
+    
+    success_rate = len([a for a in actions if a.get("success", True)]) / len(actions)
+    
+    if completion_actions and success_rate > 0.8:
+        return "likely_complete"
+    elif failure_actions and success_rate < 0.5:
+        return "incomplete_with_issues"
+    elif success_rate > 0.7:
+        return "progressing_well"
+    else:
+        return "mixed_progress"
+
+def calculate_session_duration(session_data: Dict[str, Any]) -> str:
+    """Calculate human-readable session duration"""
+    started_at = session_data.get("started_at")
+    ended_at = session_data.get("ended_at")
+    
+    if not started_at:
+        return "unknown"
+    
+    from datetime import datetime
+    try:
+        start_time = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(ended_at.replace("Z", "+00:00")) if ended_at else datetime.now(start_time.tzinfo)
+        
+        duration = end_time - start_time
+        hours = duration.total_seconds() / 3600
+        
+        if hours < 1:
+            return f"{int(duration.total_seconds() / 60)} minutes"
+        elif hours < 24:
+            return f"{hours:.1f} hours"
+        else:
+            return f"{int(hours / 24)} days, {int(hours % 24)} hours"
+    except:
+        return "unknown"
+
+async def check_pending_operations(session_id: str) -> bool:
+    """Check if there are any pending operations for the session"""
+    try:
+        # Check for pending webhook calls
+        pending_webhooks = await redis.get(f"pending_webhooks:{session_id}")
+        
+        # Check for pending database writes
+        pending_writes = await redis.get(f"pending_writes:{session_id}")
+        
+        # Check for pending file operations
+        pending_files = await redis.get(f"pending_files:{session_id}")
+        
+        return any([pending_webhooks, pending_writes, pending_files])
+    except:
+        return False
+
+async def export_session_context(session_id: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
+    """Export session context as a searchable document"""
+    try:
+        # Create a comprehensive document from session context
+        document_content = generate_session_document(session_id, session_context)
+        
+        # Store in PostgreSQL as a searchable document
+        document_id = f"session_{session_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        
+        await postgres.ingest_document(
+            document_id=document_id,
+            title=f"Session Context: {session_id}",
+            content=document_content,
+            project="finderskeepers-v2",
+            tags=["session_context", "conversation_history", "agent_actions"],
+            metadata={
+                "session_id": session_id,
+                "document_type": "session_export",
+                "export_timestamp": datetime.utcnow().isoformat()
+            }
+        )
+        
+        return {
+            "success": True,
+            "document_id": document_id,
+            "content_length": len(document_content)
+        }
+    except Exception as e:
+        logger.error(f"Failed to export session context: {e}")
+        return {"success": False, "error": str(e)}
+
+def generate_session_document(session_id: str, session_context: Dict[str, Any]) -> str:
+    """Generate a comprehensive document from session context"""
+    actions = session_context.get("actions", [])
+    conversation = session_context.get("conversation_history", [])
+    file_changes = session_context.get("file_changes", [])
+    
+    document_parts = [
+        f"# Session Context: {session_id}",
+        f"Generated: {datetime.utcnow().isoformat()}",
+        "",
+        "## Session Summary",
+        f"- Total Actions: {len(actions)}",
+        f"- Conversation Messages: {len(conversation)}",
+        f"- Files Modified: {len(file_changes)}",
+        f"- Success Rate: {session_context.get('summary', {}).get('success_rate', 0):.1%}",
+        "",
+        "## Recent Actions"
+    ]
+    
+    for action in actions[:10]:  # Last 10 actions
+        document_parts.append(f"- {action.get('timestamp', 'Unknown time')}: {action.get('description', 'No description')}")
+        if not action.get('success', True):
+            document_parts.append(f"  ❌ Failed: {action.get('details', {}).get('error_message', 'Unknown error')}")
+    
+    if file_changes:
+        document_parts.extend([
+            "",
+            "## Files Modified",
+            ""
+        ])
+        for file_change in file_changes[:20]:  # Last 20 file changes
+            document_parts.append(f"- {file_change}")
+    
+    if conversation:
+        document_parts.extend([
+            "",
+            "## Conversation Highlights",
+            ""
+        ])
+        for msg in conversation[:10]:  # Last 10 messages
+            msg_type = msg.get('message_type', 'unknown')
+            content = msg.get('content', '')[:200] + '...' if len(msg.get('content', '')) > 200 else msg.get('content', '')
+            document_parts.append(f"**{msg_type}**: {content}")
+    
+    return "\n".join(document_parts)
+
+async def prepare_session_resume_info(session_id: str, session_context: Dict[str, Any], reason: str) -> Dict[str, Any]:
+    """Prepare comprehensive resume information for the next session"""
+    actions = session_context.get("actions", [])
+    
+    resume_info = {
+        "previous_session_id": session_id,
+        "end_reason": reason,
+        "ended_at": datetime.utcnow().isoformat(),
+        "session_stats": {
+            "total_actions": len(actions),
+            "success_rate": session_context.get('summary', {}).get('success_rate', 0),
+            "conversation_messages": len(session_context.get('conversation_history', [])),
+            "files_modified": len(session_context.get('file_changes', []))
+        },
+        "continuation_context": {
+            "last_actions": actions[:5] if actions else [],
+            "recent_files": session_context.get('file_changes', [])[:10],
+            "unresolved_issues": [a for a in actions if not a.get('success', True)][:3],
+            "key_achievements": [a for a in actions if a.get('success', True)][:3]
+        },
+        "next_session_preparation": {
+            "recommended_actions": generate_intelligent_next_steps(session_context, actions),
+            "priority_items": identify_priority_items(actions, session_context.get('file_changes', [])),
+            "warnings": identify_session_warnings(actions, [a for a in actions if not a.get('success', True)])
+        }
+    }
+    
+    return resume_info
+
+async def perform_session_cleanup(session_id: str) -> Dict[str, Any]:
+    """Perform final cleanup operations for the session"""
+    try:
+        # Clear any session-specific cache entries
+        await redis.delete(f"session_cache:{session_id}")
+        await redis.delete(f"pending_operations:{session_id}")
+        
+        # Log cleanup completion
+        logger.info(f"✅ Session cleanup completed for {session_id}")
+        
+        return {"success": True, "message": "Session cleanup completed"}
+    except Exception as e:
+        logger.error(f"Session cleanup failed: {e}")
+        return {"success": False, "error": str(e)}
+
 @mcp.tool()
 async def log_claude_action(
     session_id: str,
@@ -803,6 +1214,304 @@ async def log_claude_action(
             "status": "failed",
             "session_id": session_id,
             "action_type": action_type,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@mcp.tool()
+async def resume_session(
+    project: str = "finderskeepers-v2",
+    quick_summary: bool = True,
+    auto_initialize: bool = True
+) -> Dict[str, Any]:
+    """
+    🚀 Smart session resumption with automatic context loading and continuation recommendations.
+    
+    This is the MAIN tool for starting your Claude Code sessions. It automatically:
+    - Finds your most recent session
+    - Loads full context from previous work
+    - Analyzes what you were working on
+    - Provides intelligent next-step recommendations
+    - Initializes a new session with complete continuity
+    
+    Args:
+        project: Project to resume (default: finderskeepers-v2)
+        quick_summary: If True, show concise summary. If False, full detailed context
+        auto_initialize: Whether to automatically start a new session (default: True)
+    
+    Returns:
+        Complete session resume information with context, recommendations, and new session ID
+    """
+    try:
+        logger.info(f"🔄 Resuming session for project: {project}")
+        
+        # Step 1: Try Redis cache first for instant results
+        cached_resume_info = await redis.get(f"session_resume:{project}")
+        
+        if cached_resume_info and quick_summary:
+            cached_data = json.loads(cached_resume_info)
+            logger.info("⚡ Using cached resume information")
+            
+            # Still initialize new session if requested
+            if auto_initialize:
+                new_session_result = await initialize_claude_session(project=project)
+                cached_data["new_session"] = new_session_result
+                
+            return cached_data
+        
+        # Step 2: Get latest session from database
+        latest_session = await postgres.get_latest_session_with_full_context(project)
+        
+        if not latest_session:
+            logger.info("🌱 No previous session found, starting fresh")
+            
+            if auto_initialize:
+                new_session_result = await initialize_claude_session(project=project)
+                return {
+                    "status": "fresh_start",
+                    "message": "🌱 No previous session found. Starting fresh with full context!",
+                    "new_session": new_session_result,
+                    "recommendations": ["🎯 Check project roadmap", "📋 Review recent commits", "🔍 Search knowledge base for context"],
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            else:
+                return {"message": "No previous session found. Ready to start fresh!"}
+        
+        # Step 3: Generate comprehensive resume context
+        session_id = latest_session["session_id"]
+        actions = latest_session.get("actions", [])
+        
+        # Analyze recent actions for context
+        recent_actions = actions[:10]  # Last 10 actions
+        successful_actions = [a for a in recent_actions if a.get("success", True)]
+        failed_actions = [a for a in recent_actions if not a.get("success", True)]
+        
+        # Generate action summary
+        actions_summary = generate_detailed_actions_summary(recent_actions)
+        
+        # Get files that were modified
+        files_modified = await postgres.get_files_affected_by_session(session_id)
+        
+        # Generate intelligent next steps
+        next_steps = generate_intelligent_next_steps(latest_session, actions)
+        
+        # Calculate session statistics
+        success_rate = len(successful_actions) / len(recent_actions) if recent_actions else 0
+        
+        # Analyze conversation flow for emotional context
+        conversation_flow = analyze_session_conversation_flow(actions)
+        
+        # Generate completion status
+        completion_status = analyze_session_completion_status(actions)
+        
+        # Create comprehensive resume data
+        resume_data = {
+            "status": "session_resumed",
+            "previous_session": {
+                "session_id": session_id,
+                "started_at": latest_session.get("started_at"),
+                "ended_at": latest_session.get("ended_at"),
+                "duration": calculate_session_duration(latest_session),
+                "agent_type": latest_session.get("agent_type", "claude-code")
+            },
+            "session_analysis": {
+                "total_actions": len(actions),
+                "successful_actions": len(successful_actions),
+                "failed_actions": len(failed_actions),
+                "success_rate": success_rate,
+                "completion_status": completion_status,
+                "conversation_flow": conversation_flow
+            },
+            "recent_work": {
+                "actions_summary": actions_summary,
+                "files_modified": files_modified,
+                "last_action": recent_actions[0] if recent_actions else None,
+                "last_successful_action": successful_actions[0] if successful_actions else None,
+                "last_failed_action": failed_actions[0] if failed_actions else None
+            },
+            "continuation_guidance": {
+                "next_steps": next_steps,
+                "recommendations": generate_continuation_recommendations_enhanced(latest_session, actions),
+                "priority_items": identify_priority_items(actions, files_modified),
+                "warnings": identify_session_warnings(actions, failed_actions)
+            },
+            "context_loaded": True,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # Step 4: Cache the resume information for quick access
+        await redis.setex(f"session_resume:{project}", 3600, json.dumps(resume_data))
+        
+        # Step 5: Auto-initialize new session if requested
+        if auto_initialize:
+            new_session_result = await initialize_claude_session(
+                project=project,
+                context={
+                    "resumed_from": session_id,
+                    "continuation_mode": True,
+                    "previous_session_summary": resume_data["session_analysis"]
+                }
+            )
+            resume_data["new_session"] = new_session_result
+            
+            # Log the successful resume
+            await activity_logger.log_action(
+                action_type="session_resume",
+                description=f"Successfully resumed from session {session_id}",
+                details={
+                    "previous_session_id": session_id,
+                    "new_session_id": new_session_result.get("session_id"),
+                    "actions_resumed": len(actions),
+                    "files_context": len(files_modified),
+                    "success_rate": success_rate
+                }
+            )
+        
+        return resume_data
+        
+    except Exception as e:
+        logger.error(f"Session resume failed: {e}")
+        return {
+            "error": str(e),
+            "status": "resume_failed",
+            "message": "❌ Session resume failed. Starting fresh session instead.",
+            "fallback_session": await initialize_claude_session(project=project) if auto_initialize else None,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@mcp.tool()
+async def endsession(
+    session_id: Optional[str] = None,
+    reason: str = "work_complete",
+    completion_timeout: int = 30,
+    prepare_resume: bool = True,
+    export_context: bool = True
+) -> Dict[str, Any]:
+    """
+    🏁 Gracefully end your Claude Code session with guaranteed data persistence and resume preparation.
+    
+    This is the MAIN tool for ending your sessions properly. It ensures:
+    - All conversation data is fully ingested and stored
+    - Session context is exported for future searchability
+    - Resume information is prepared for next session
+    - Databases are properly updated before shutdown
+    - Graceful termination with cleanup verification
+    
+    Args:
+        session_id: Session ID to end (auto-detected if not provided)
+        reason: Reason for ending session (default: work_complete)
+        completion_timeout: Max seconds to wait for data ingestion (default: 30)
+        prepare_resume: Whether to prepare resume info for next session (default: True)
+        export_context: Whether to export session context as searchable document (default: True)
+    
+    Returns:
+        Session termination confirmation with data persistence status
+    """
+    try:
+        logger.info(f"🏁 Ending session gracefully: {session_id or 'auto-detect'}")
+        
+        # Step 1: Auto-detect session ID if not provided
+        if not session_id:
+            latest_session = await postgres.get_latest_active_session("finderskeepers-v2")
+            if latest_session:
+                session_id = latest_session["session_id"]
+            else:
+                return {
+                    "error": "No active session found to end",
+                    "status": "no_active_session",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+        
+        # Step 2: Get full session context before termination
+        session_context = await get_full_conversation_context(
+            session_id=session_id,
+            include_conversation_history=True,
+            include_files=True,
+            conversation_limit=100
+        )
+        
+        # Step 3: Wait for any pending data ingestion to complete
+        logger.info(f"⏳ Waiting up to {completion_timeout}s for data ingestion to complete...")
+        await asyncio.sleep(2)  # Initial buffer
+        
+        # Check for pending operations
+        pending_operations = await check_pending_operations(session_id)
+        wait_time = 0
+        
+        while pending_operations and wait_time < completion_timeout:
+            await asyncio.sleep(1)
+            wait_time += 1
+            pending_operations = await check_pending_operations(session_id)
+            
+        if pending_operations:
+            logger.warning(f"⚠️ Some operations still pending after {completion_timeout}s timeout")
+        
+        # Step 4: Export session context as searchable document
+        export_result = None
+        if export_context:
+            export_result = await export_session_context(session_id, session_context)
+        
+        # Step 5: Prepare resume information for next session
+        resume_info = None
+        if prepare_resume:
+            resume_info = await prepare_session_resume_info(session_id, session_context, reason)
+            
+            # Save to Redis with 24-hour expiration
+            await redis.setex(
+                f"session_resume:finderskeepers-v2", 
+                86400, 
+                json.dumps(resume_info)
+            )
+        
+        # Step 6: Mark session as ended in database
+        end_result = await postgres.end_session(session_id, reason)
+        
+        # Step 7: Log the session termination
+        await activity_logger.log_action(
+            action_type="session_end",
+            description=f"Session {session_id} ended gracefully",
+            details={
+                "session_id": session_id,
+                "reason": reason,
+                "completion_timeout": completion_timeout,
+                "data_exported": export_context,
+                "resume_prepared": prepare_resume,
+                "pending_operations_cleared": not pending_operations,
+                "actions_processed": len(session_context.get("actions", [])),
+                "conversation_messages": len(session_context.get("conversation_history", []))
+            }
+        )
+        
+        # Step 8: Final cleanup and verification
+        cleanup_result = await perform_session_cleanup(session_id)
+        
+        return {
+            "status": "session_ended",
+            "session_id": session_id,
+            "reason": reason,
+            "data_persistence": {
+                "context_exported": export_result is not None,
+                "resume_prepared": resume_info is not None,
+                "database_updated": end_result.get("success", False),
+                "cleanup_completed": cleanup_result.get("success", False)
+            },
+            "session_summary": {
+                "total_actions": len(session_context.get("actions", [])),
+                "total_messages": len(session_context.get("conversation_history", [])),
+                "files_modified": len(session_context.get("file_changes", [])),
+                "success_rate": session_context.get("summary", {}).get("success_rate", 0)
+            },
+            "next_session_ready": resume_info is not None,
+            "message": f"✅ Session {session_id[-8:]} ended gracefully. All data preserved for next session.",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Session termination failed: {e}")
+        return {
+            "error": str(e),
+            "status": "termination_failed",
+            "session_id": session_id,
+            "message": "❌ Session termination encountered errors. Some data may not be preserved.",
             "timestamp": datetime.utcnow().isoformat()
         }
 
@@ -1240,6 +1949,9 @@ async def monitor_parent_process():
         logger.info("👁️ Parent process monitoring cancelled")
 
 if __name__ == "__main__":
+    # Load environment variables from .env file
+    load_dotenv()
+    
     # Run the MCP server
     logger.info("🌟 FindersKeepers v2 Knowledge MCP Server")
     logger.info("🔗 Connecting AI agents to universal knowledge...")

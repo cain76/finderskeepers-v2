@@ -1,0 +1,170 @@
+{
+  "name": "Old Session Logger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-logger",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "2bcc95c0-3ef1-488d-aea8-65fdd1db6a05",
+      "name": "Agent Session Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "45165d52-770a-440a-a4b7-2e628218c29b"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "agent_type",
+              "name": "agent_type",
+              "value": "={{ $json.body.agent_type || 'claude-code' }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'local_user' }}",
+              "type": "string"
+            },
+            {
+              "id": "project",
+              "name": "project",
+              "value": "={{ $json.body.project || 'finderskeepers-v2' }}",
+              "type": "string"
+            },
+            {
+              "id": "context",
+              "name": "context",
+              "value": "={{ $json.body.context }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5575d63d-2003-4216-8b1d-3b49381efcdb",
+      "name": "Transform Session Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fk2_fastapi/api/diary/sessions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"agent_type\": \"{{ $('Transform Session Data').item.json.agent_type }}\",\n    \"user_id\": \"{{ $('Transform Session Data').item.json.user_id }}\",\n    \"project\": \"{{ $('Transform Session Data').item.json.project }}\",\n    \"context\": {{ JSON.stringify($('Transform Session Data').item.json.context) }}\n}",
+        "options": {}
+      },
+      "id": "16ae587b-b807-41f6-b5c7-5b8c867fee73",
+      "name": "Notify FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Agent session logged successfully",
+              "type": "string"
+            },
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $('Notify FastAPI').item.json.data.session_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "67645de1-2bfb-4809-9ba7-a99ea45ffda3",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        600,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agent Session Webhook": {
+      "main": [
+        [
+          {
+            "node": "Transform Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Session Data": {
+      "main": [
+        [
+          {
+            "node": "Notify FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify FastAPI": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2b468aa5-1de0-48c1-b967-9c9d4aa6e298",
+  "meta": {
+    "instanceId": "ac197806a966aef7a32a37f88a86659b96901c5596e657b15fe03671fab2eec0"
+  },
+  "id": "UWhp1kugsr3t3106",
+  "tags": [
+    {
+      "createdAt": "2025-07-05T15:56:56.588Z",
+      "updatedAt": "2025-07-05T15:56:56.588Z",
+      "id": "wziWqzrMJF7yBPeO",
+      "name": "Agent Automation"
+    }
+  ]
+}

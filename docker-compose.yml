@@ -265,6 +265,23 @@ services:
     networks:
       - finderskeepers_network
 
+  # ========================================
+  # WEB SCRAPING SERVICE (Beautiful Soup)
+  # ========================================
+  webscraper:
+    build:
+      context: ./services/crawl4ai-service
+      dockerfile: Dockerfile
+    container_name: fk2_webscraper
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      - fastapi
+    networks:
+      - finderskeepers_network
 
   # ========================================
   # CHAT INTERFACE (Future Enhancement)

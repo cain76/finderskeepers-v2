@@ -198,8 +198,8 @@ class IngestionService:
             # Use Crawl4AI or similar for web scraping
             content = await self._fetch_url_content(request.url)
             
-            # Save content to temporary file
-            temp_file = Path(f"/tmp/fk2_ingestion/{ingestion_id}_web.html")
+            # Save content to temporary file with proper HTML extension
+            temp_file = Path(f"/tmp/fk2_ingestion/{ingestion_id}_url.html")
             temp_file.parent.mkdir(exist_ok=True)
             temp_file.write_text(content)
             
@@ -345,14 +345,56 @@ class IngestionService:
             return chunks
 
     async def _fetch_url_content(self, url: str) -> str:
-        """Fetch content from URL"""
+        """Fetch content from URL using Crawl4AI service"""
         try:
-            # In production, use Crawl4AI or similar
-            # For now, simple HTTP fetch
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                return response.text
+            # First try the Web Scraping service
+            try:
+                webscraper_url = "http://webscraper:8001/scrape"
+                scrape_request = {
+                    "url": url,
+                    "extract_content": True,
+                    "extract_links": False,
+                    "extract_images": False,
+                    "timeout": 30,
+                    "javascript": True
+                }
+                
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(webscraper_url, json=scrape_request)
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    if result.get("success"):
+                        logger.info(f"✅ Successfully scraped {url} using Web Scraping service")
+                        return result.get("content", result.get("html", ""))
+                    else:
+                        logger.warning(f"Web Scraping service failed for {url}: {result.get('error')}")
+                        raise Exception(f"Web Scraping service failed: {result.get('error')}")
+                        
+            except Exception as webscraper_error:
+                logger.warning(f"Web Scraping service unavailable, falling back to simple HTTP: {webscraper_error}")
+                
+                # Fallback to simple HTTP fetch
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                }
+                
+                async with httpx.AsyncClient(
+                    timeout=30.0,
+                    headers=headers,
+                    follow_redirects=True,
+                    verify=False  # Allow self-signed certificates
+                ) as client:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    logger.info(f"✅ Successfully scraped {url} using HTTP fallback")
+                    return response.text
+                    
         except Exception as e:
             logger.error(f"URL fetch failed: {e}")
             raise

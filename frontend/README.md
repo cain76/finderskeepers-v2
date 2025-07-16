@@ -1,4 +1,20 @@
-# React + TypeScript + Vite
+# FindersKeepers v2 Frontend
+
+## 🚨 IMPORTANT: Docker-Only Development
+
+This frontend application is designed to run ONLY in the Docker container `fk2_frontend`. 
+
+**DO NOT run `npm run dev` or any other development commands locally.**
+
+To start the frontend:
+```bash
+# From the project root
+./scripts/start-all.sh
+```
+
+The frontend will be available at http://localhost:3000
+
+## Technical Details
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

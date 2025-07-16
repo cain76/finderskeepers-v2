@@ -762,3 +762,166 @@ class DocumentQueries:
         except Exception as e:
             logger.error(f"Failed to get document {document_id}: {e}")
             raise
+
+class ConversationQueries:
+    """Database queries for conversation message management"""
+    
+    @staticmethod
+    async def log_conversation_message(
+        message_id: str,
+        session_id: str,
+        message_type: str,
+        content: str,
+        context: Optional[Dict[str, Any]] = None,
+        reasoning: Optional[str] = None,
+        tools_used: Optional[List[str]] = None,
+        files_referenced: Optional[List[str]] = None,
+        sequence_number: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Log a conversation message to the database"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                now = datetime.now(timezone.utc)
+                
+                # Auto-generate sequence number if not provided
+                if sequence_number is None:
+                    sequence_number = await conn.fetchval("""
+                        SELECT COALESCE(MAX(sequence_number), 0) + 1
+                        FROM conversation_messages
+                        WHERE session_id = $1
+                    """, session_id)
+                
+                result = await conn.fetchrow("""
+                    INSERT INTO conversation_messages 
+                    (message_id, session_id, message_type, content, context, reasoning, 
+                     tools_used, files_referenced, sequence_number)
+                    VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)
+                    RETURNING *
+                """, message_id, session_id, message_type, content, 
+                    json.dumps(context or {}), reasoning, tools_used or [], 
+                    files_referenced or [], sequence_number)
+                
+                return {
+                    "id": str(result['id']),
+                    "message_id": result['message_id'],
+                    "session_id": result['session_id'],
+                    "message_type": result['message_type'],
+                    "content_length": len(result['content']),
+                    "sequence_number": result['sequence_number'],
+                    "timestamp": result['timestamp'].isoformat(),
+                    "created_at": result['created_at'].isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to log conversation message: {e}")
+            raise
+    
+    @staticmethod
+    async def get_conversation_history(
+        session_id: str,
+        limit: int = 50,
+        message_types: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """Get conversation history for a session"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                conditions = ["session_id = $1"]
+                params = [session_id]
+                param_count = 1
+                
+                if message_types:
+                    param_count += 1
+                    conditions.append(f"message_type = ANY(${param_count})")
+                    params.append(message_types)
+                
+                param_count += 1
+                params.append(limit)
+                
+                query = f"""
+                    SELECT *
+                    FROM conversation_messages
+                    WHERE {' AND '.join(conditions)}
+                    ORDER BY sequence_number DESC, timestamp DESC
+                    LIMIT ${param_count}
+                """
+                
+                messages = await conn.fetch(query, *params)
+                
+                return [
+                    {
+                        "id": str(row['id']),
+                        "message_id": row['message_id'],
+                        "session_id": row['session_id'],
+                        "message_type": row['message_type'],
+                        "content": row['content'],
+                        "context": row['context'],
+                        "reasoning": row['reasoning'],
+                        "tools_used": row['tools_used'],
+                        "files_referenced": row['files_referenced'],
+                        "sequence_number": row['sequence_number'],
+                        "timestamp": row['timestamp'].isoformat(),
+                        "created_at": row['created_at'].isoformat()
+                    }
+                    for row in messages
+                ]
+                
+        except Exception as e:
+            logger.error(f"Failed to get conversation history: {e}")
+            raise
+    
+    @staticmethod
+    async def get_conversation_summary(session_id: str) -> Dict[str, Any]:
+        """Get conversation summary statistics for a session"""
+        try:
+            async with db_manager.get_postgres_connection() as conn:
+                stats = await conn.fetchrow("""
+                    SELECT 
+                        COUNT(*) as total_messages,
+                        COUNT(CASE WHEN message_type = 'user_message' THEN 1 END) as user_messages,
+                        COUNT(CASE WHEN message_type = 'ai_response' THEN 1 END) as ai_responses,
+                        COUNT(CASE WHEN message_type = 'system_message' THEN 1 END) as system_messages,
+                        COUNT(CASE WHEN message_type = 'tool_result' THEN 1 END) as tool_results,
+                        AVG(LENGTH(content)) as avg_message_length,
+                        SUM(LENGTH(content)) as total_content_length,
+                        MIN(timestamp) as first_message_time,
+                        MAX(timestamp) as last_message_time
+                    FROM conversation_messages
+                    WHERE session_id = $1
+                """, session_id)
+                
+                # Get most recent messages for context
+                recent_messages = await conn.fetch("""
+                    SELECT message_type, content, timestamp
+                    FROM conversation_messages
+                    WHERE session_id = $1
+                    ORDER BY sequence_number DESC, timestamp DESC
+                    LIMIT 3
+                """, session_id)
+                
+                return {
+                    "session_id": session_id,
+                    "total_messages": stats['total_messages'],
+                    "user_messages": stats['user_messages'],
+                    "ai_responses": stats['ai_responses'],
+                    "system_messages": stats['system_messages'],
+                    "tool_results": stats['tool_results'],
+                    "avg_message_length": float(stats['avg_message_length']) if stats['avg_message_length'] else 0,
+                    "total_content_length": stats['total_content_length'],
+                    "conversation_duration": (
+                        stats['last_message_time'] - stats['first_message_time']
+                    ).total_seconds() if stats['first_message_time'] and stats['last_message_time'] else 0,
+                    "first_message_time": stats['first_message_time'].isoformat() if stats['first_message_time'] else None,
+                    "last_message_time": stats['last_message_time'].isoformat() if stats['last_message_time'] else None,
+                    "recent_messages": [
+                        {
+                            "message_type": row['message_type'],
+                            "content_preview": row['content'][:100] + "..." if len(row['content']) > 100 else row['content'],
+                            "timestamp": row['timestamp'].isoformat()
+                        }
+                        for row in recent_messages
+                    ]
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get conversation summary: {e}")
+            raise

@@ -37,6 +37,22 @@ CREATE TABLE IF NOT EXISTS agent_actions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Conversation messages table for storing chat history
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id VARCHAR(255) UNIQUE NOT NULL,
+    session_id VARCHAR(255) REFERENCES agent_sessions(session_id) ON DELETE CASCADE,
+    message_type VARCHAR(50) NOT NULL, -- 'user_message', 'ai_response', 'system_message', 'tool_result'
+    content TEXT NOT NULL,
+    context JSONB DEFAULT '{}', -- Additional context like emotional tone, urgency, topic changes
+    reasoning TEXT, -- AI reasoning process and decision-making (for AI responses)
+    tools_used TEXT[] DEFAULT '{}', -- List of tools used in this interaction
+    files_referenced TEXT[] DEFAULT '{}', -- Files mentioned or referenced in the message
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    sequence_number INTEGER, -- Order within the session
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ========================================
 -- DOCUMENT STORAGE & VECTOR SEARCH
 -- ========================================
@@ -124,6 +140,12 @@ CREATE INDEX IF NOT EXISTS idx_agent_sessions_start_time ON agent_sessions(start
 CREATE INDEX IF NOT EXISTS idx_agent_actions_session ON agent_actions(session_id);
 CREATE INDEX IF NOT EXISTS idx_agent_actions_type ON agent_actions(action_type);
 CREATE INDEX IF NOT EXISTS idx_agent_actions_timestamp ON agent_actions(timestamp);
+
+-- Conversation messages indexes
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_session ON conversation_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_type ON conversation_messages(message_type);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_timestamp ON conversation_messages(timestamp);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_sequence ON conversation_messages(session_id, sequence_number);
 
 -- Documents indexes
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project);
@@ -236,7 +258,8 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO finderskeepers;
 DO $$
 BEGIN
     RAISE NOTICE '✅ FindersKeepers v2 database initialized successfully!';
-    RAISE NOTICE '📊 Tables created: agent_sessions, agent_actions, documents, document_chunks';
+    RAISE NOTICE '📊 Tables created: agent_sessions, agent_actions, conversation_messages, documents, document_chunks';
+    RAISE NOTICE '💬 Conversation history tracking enabled with conversation_messages table';
     RAISE NOTICE '🔍 Vector search enabled with pgvector extension';
     RAISE NOTICE '⚡ Indexes created for optimal performance';
 END $$;

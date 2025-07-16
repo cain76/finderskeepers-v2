@@ -1,0 +1,10 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+requests==2.31.0
+pydantic==2.5.0
+httpx==0.25.2
+beautifulsoup4==4.12.2
+lxml==4.9.3
+aiofiles==23.2.1
+python-multipart==0.0.6
+readability-lxml==0.8.1

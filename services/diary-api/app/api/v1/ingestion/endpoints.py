@@ -368,7 +368,7 @@ async def get_supported_formats():
             "compressed": {"method": "Recursive extraction", "extensions": [".zip", ".tar", ".gz", ".rar", ".7z"]}
         },
         "web": {
-            "urls": {"method": "Crawl4AI + Unstructured", "patterns": ["http://*", "https://*"]},
+            "urls": {"method": "HTTP fetch + Unstructured.io", "patterns": ["http://*", "https://*"]},
             "social": {"method": "API extraction", "platforms": ["twitter.com", "linkedin.com"]}
         }
     }

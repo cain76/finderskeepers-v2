@@ -1,0 +1,194 @@
+{
+  "name": "Old Action Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-actions",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "ed4c9091-2bbe-4083-8db1-d60884596989",
+      "name": "Agent Action Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b8f20346-acff-49d2-b23f-8c66d67cd800"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "action_id",
+              "name": "action_id",
+              "value": "={{ $json.body.action_id || 'action_' + $uuid }}",
+              "type": "string"
+            },
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "action_type",
+              "name": "action_type",
+              "value": "={{ $json.body.action_type || 'command' }}",
+              "type": "string"
+            },
+            {
+              "id": "description",
+              "name": "description",
+              "value": "={{ $json.body.description || 'Action performed by agent' }}",
+              "type": "string"
+            },
+            {
+              "id": "details",
+              "name": "details",
+              "value": "={{ $json.body.details }}",
+              "type": "object"
+            },
+            {
+              "id": "files_affected",
+              "name": "files_affected",
+              "value": "={{ $json.body.files_affected }}",
+              "type": "array"
+            },
+            {
+              "id": "success",
+              "name": "success",
+              "value": "={{ $json.body.success !== undefined ? $json.body.success : true }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "531c3a48-c5ca-46e6-bc98-fdfb9adaa3fb",
+      "name": "Transform Action Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fk2_fastapi/api/diary/actions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"action_id\": \"{{ $('Transform Action Data').item.json.action_id }}\",\n    \"session_id\": \"{{ $('Transform Action Data').item.json.session_id }}\",\n    \"action_type\": \"{{ $('Transform Action Data').item.json.action_type }}\",\n    \"description\": \"{{ $('Transform Action Data').item.json.description }}\",\n    \"details\": {{ JSON.stringify($('Transform Action Data').item.json.details) }},\n    \"files_affected\": {{ JSON.stringify($('Transform Action Data').item.json.files_affected) }},\n    \"success\": {{ $('Transform Action Data').item.json.success }}\n}",
+        "options": {}
+      },
+      "id": "29011ea5-7297-486a-975f-31d95459a072",
+      "name": "Notify FastAPI Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Agent action logged successfully",
+              "type": "string"
+            },
+            {
+              "id": "action_id",
+              "name": "action_id",
+              "value": "={{ $('Notify FastAPI Actions').item.json.data.action_id }}",
+              "type": "string"
+            },
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $('Transform Action Data').item.json.session_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "85070607-f287-43b1-841d-02d35a719f21",
+      "name": "Action Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        600,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agent Action Webhook": {
+      "main": [
+        [
+          {
+            "node": "Transform Action Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Action Data": {
+      "main": [
+        [
+          {
+            "node": "Notify FastAPI Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify FastAPI Actions": {
+      "main": [
+        [
+          {
+            "node": "Action Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f5237296-f84c-4e66-81e6-949b9d8f5c6e",
+  "meta": {
+    "instanceId": "ac197806a966aef7a32a37f88a86659b96901c5596e657b15fe03671fab2eec0"
+  },
+  "id": "FTrhqTpOaSmczfWr",
+  "tags": [
+    {
+      "createdAt": "2025-07-05T15:56:56.588Z",
+      "updatedAt": "2025-07-05T15:56:56.588Z",
+      "id": "wziWqzrMJF7yBPeO",
+      "name": "Agent Automation"
+    }
+  ]
+}

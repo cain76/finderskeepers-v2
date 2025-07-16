@@ -1149,6 +1149,191 @@ async def get_conversation_history(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ========================================
+# URL SCRAPING API - REST Endpoint for URL Scraping
+# ========================================
+
+class ChatScrapeRequest(BaseModel):
+    """Request model for chat-initiated URL scraping"""
+    urls: List[str] = Field(..., description="URLs to scrape")
+    project: str = Field(default="finderskeepers-v2", description="Project to associate content with")
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    client_id: Optional[str] = Field(None, description="WebSocket client ID for progress updates")
+    scrape_options: Dict[str, Any] = Field(default_factory=dict, description="Additional scraping options")
+
+@app.post("/api/chat/scrape-url", tags=["Chat"])
+async def scrape_urls_from_chat(
+    request: ChatScrapeRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Scrape URLs initiated from chat interface and ingest into knowledge base.
+    
+    This endpoint orchestrates crawl4ai scraping with the existing ingestion pipeline.
+    It provides both synchronous responses and optional WebSocket progress updates.
+    """
+    try:
+        logger.info(f"🕷️ Processing chat scrape request for {len(request.urls)} URLs")
+        
+        if not request.urls:
+            raise HTTPException(status_code=400, detail="No URLs provided for scraping")
+        
+        # Validate URLs
+        import re
+        url_pattern = r'https?://[^\s<>"\'|\\]+(?:[^\s<>"\'|\\.,;:!?])'
+        valid_urls = []
+        invalid_urls = []
+        
+        for url in request.urls:
+            if re.match(url_pattern, url):
+                valid_urls.append(url)
+            else:
+                invalid_urls.append(url)
+        
+        if not valid_urls:
+            raise HTTPException(status_code=400, detail="No valid URLs found")
+        
+        # Generate batch ID for tracking
+        batch_id = f"chat_scrape_{uuid4().hex[:8]}"
+        
+        # Prepare results tracking
+        scrape_results = []
+        successful_scrapes = 0
+        
+        # Send initial progress if WebSocket client provided
+        if request.client_id:
+            try:
+                start_message = {
+                    "type": "scrape_started",
+                    "message": f"🕷️ Starting to scrape {len(valid_urls)} URL(s)...",
+                    "urls_count": len(valid_urls),
+                    "batch_id": batch_id,
+                    "project": request.project,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "client_id": request.client_id
+                }
+                if request.client_id in manager.active_connections:
+                    await manager.send_personal_message(json.dumps(start_message), request.client_id)
+            except Exception as ws_error:
+                logger.warning(f"Failed to send WebSocket start message: {ws_error}")
+        
+        # Process each URL
+        for i, url in enumerate(valid_urls):
+            try:
+                # Send progress update if WebSocket available
+                if request.client_id and request.client_id in manager.active_connections:
+                    try:
+                        progress_message = {
+                            "type": "scrape_progress",
+                            "message": f"📄 Scraping {i+1}/{len(valid_urls)}: {url}",
+                            "current_url": url,
+                            "progress": ((i+1) / len(valid_urls)) * 100,
+                            "batch_id": batch_id,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "client_id": request.client_id
+                        }
+                        await manager.send_personal_message(json.dumps(progress_message), request.client_id)
+                    except Exception as ws_error:
+                        logger.warning(f"Failed to send WebSocket progress: {ws_error}")
+                
+                # Prepare ingestion data
+                ingestion_data = {
+                    "url": url,
+                    "project": request.project,
+                    "tags": request.tags + ["chat-scraped", "web", "api-endpoint"],
+                    "metadata": {
+                        "scraped_via": "chat_api_endpoint",
+                        "batch_id": batch_id,
+                        "client_id": request.client_id,
+                        "scraped_at": datetime.now(timezone.utc).isoformat(),
+                        **request.scrape_options
+                    }
+                }
+                
+                # Call existing ingestion endpoint
+                async with httpx.AsyncClient(timeout=60.0) as http_client:
+                    response = await http_client.post(
+                        "http://localhost:8000/api/v1/ingestion/url",
+                        json=ingestion_data
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        scrape_results.append({
+                            "url": url,
+                            "success": True,
+                            "ingestion_id": result.get("ingestion_id"),
+                            "status": "queued_for_processing",
+                            "message": "Successfully queued for ingestion"
+                        })
+                        successful_scrapes += 1
+                    else:
+                        error_detail = f"Ingestion API returned status {response.status_code}"
+                        scrape_results.append({
+                            "url": url,
+                            "success": False,
+                            "error": error_detail,
+                            "status": "failed",
+                            "message": "Failed to queue for ingestion"
+                        })
+                        logger.error(f"❌ {error_detail} for URL: {url}")
+                        
+            except Exception as url_error:
+                error_msg = str(url_error)
+                scrape_results.append({
+                    "url": url,
+                    "success": False,
+                    "error": error_msg,
+                    "status": "failed", 
+                    "message": "Scraping request failed"
+                })
+                logger.error(f"❌ Error processing URL {url}: {url_error}")
+        
+        # Send completion message if WebSocket available
+        if request.client_id and request.client_id in manager.active_connections:
+            try:
+                completion_message = {
+                    "type": "scrape_completed",
+                    "message": f"✅ Scraping completed! {successful_scrapes}/{len(valid_urls)} URLs successfully processed.",
+                    "total_urls": len(valid_urls),
+                    "successful_scrapes": successful_scrapes,
+                    "failed_scrapes": len(valid_urls) - successful_scrapes,
+                    "batch_id": batch_id,
+                    "results": scrape_results,
+                    "project": request.project,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "client_id": request.client_id
+                }
+                await manager.send_personal_message(json.dumps(completion_message), request.client_id)
+            except Exception as ws_error:
+                logger.warning(f"Failed to send WebSocket completion: {ws_error}")
+        
+        # Return comprehensive response
+        response_data = {
+            "success": successful_scrapes > 0,
+            "batch_id": batch_id,
+            "total_urls": len(request.urls),
+            "valid_urls": len(valid_urls),
+            "invalid_urls": invalid_urls,
+            "successful_scrapes": successful_scrapes,
+            "failed_scrapes": len(valid_urls) - successful_scrapes,
+            "success_rate": successful_scrapes / len(valid_urls) if valid_urls else 0,
+            "project": request.project,
+            "tags": request.tags,
+            "results": scrape_results,
+            "summary": f"Processed {successful_scrapes}/{len(valid_urls)} URLs successfully",
+            "message": f"✅ Scraping initiated for {len(valid_urls)} URLs. Check your knowledge base for ingested content.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Chat scrape request failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Scraping request failed: {str(e)}")
+
+# ========================================
 # WEBSOCKET ENDPOINTS - Real-time Chat
 # ========================================
 
@@ -1203,7 +1388,41 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     # Process chat message through Ollama
                     logger.info(f"Processing chat message from {client_id}: {message_content[:100]}...")
                     
-                    # Generate response using local Ollama
+                    # Check for URLs in the message
+                    import re
+                    url_pattern = r'https?://[^\s]+'
+                    detected_urls = re.findall(url_pattern, message_content)
+                    
+                    logger.info(f"🔍 URL Detection: Found {len(detected_urls)} URLs in message: {detected_urls}")
+                    
+                    if detected_urls:
+                        # URLs detected - offer to scrape them
+                        logger.info(f"🔗 Detected {len(detected_urls)} URLs in message from {client_id}: {detected_urls}")
+                        
+                        url_suggestions = []
+                        for url in detected_urls[:3]:  # Limit to first 3 URLs
+                            url_suggestions.append({
+                                "url": url,
+                                "action": "scrape",
+                                "project": "finderskeepers-v2"  # Default project
+                            })
+                        
+                        # Send URL detection response
+                        url_detection_message = {
+                            "type": "url_detected",
+                            "message": f"I found {len(detected_urls)} URL(s) in your message. Would you like me to scrape them for your knowledge base?",
+                            "urls": url_suggestions,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "client_id": client_id
+                        }
+                        
+                        logger.info(f"📤 Sending URL detection message: {url_detection_message}")
+                        await manager.send_personal_message(json.dumps(url_detection_message), client_id)
+                        logger.info(f"✅ URL detection message sent to {client_id}")
+                    else:
+                        logger.info(f"❌ No URLs detected in message: '{message_content[:100]}...')")
+                    
+                    # Also generate normal chat response
                     response = await ollama_client.generate_text(
                         f"You are a helpful AI assistant for FindersKeepers v2. Respond to: {message_content}",
                         max_tokens=512
@@ -1238,6 +1457,154 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     }
                     
                     await manager.send_personal_message(json.dumps(response_message), client_id)
+                
+                elif message_type == "url_scrape":
+                    # Handle URL scraping requests with throttling
+                    logger.info(f"Processing URL scrape request from {client_id}")
+                    
+                    urls = message_data.get("urls", [])
+                    project = message_data.get("project", "finderskeepers-v2")
+                    tags = message_data.get("tags", [])
+                    scrape_options = message_data.get("scrape_options", {})
+                    
+                    # Extract throttling options
+                    delay_between_requests = scrape_options.get("delay_between_requests", 2000)  # ms
+                    respect_robots_txt = scrape_options.get("respect_robots_txt", True)
+                    user_agent = scrape_options.get("user_agent", "FindersKeepers-v2-Bot/1.0 (Respectful scraper)")
+                    timeout = scrape_options.get("timeout", 30000)  # ms
+                    max_retries = scrape_options.get("max_retries", 2)
+                    
+                    if not urls:
+                        error_message = {
+                            "type": "scrape_error",
+                            "message": "No URLs provided for scraping",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "client_id": client_id
+                        }
+                        await manager.send_personal_message(json.dumps(error_message), client_id)
+                        continue
+                    
+                    # Send scraping started message with throttling info
+                    start_message = {
+                        "type": "scrape_started",
+                        "message": f"🕷️ Starting respectful scraping of {len(urls)} URL(s) with {delay_between_requests}ms delay...",
+                        "urls_count": len(urls),
+                        "project": project,
+                        "throttle_delay": delay_between_requests,
+                        "respect_robots": respect_robots_txt,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "client_id": client_id
+                    }
+                    await manager.send_personal_message(json.dumps(start_message), client_id)
+                    
+                    # Process URLs with throttling
+                    scrape_results = []
+                    successful_scrapes = 0
+                    
+                    for i, url in enumerate(urls):
+                        try:
+                            # Apply delay before scraping (except for first URL)
+                            if i > 0:
+                                delay_seconds = delay_between_requests / 1000.0
+                                await asyncio.sleep(delay_seconds)
+                                
+                                # Send throttling message
+                                throttle_message = {
+                                    "type": "scrape_progress",
+                                    "message": f"⏳ Waiting {delay_seconds}s before next scrape (respectful crawling)...",
+                                    "current_url": url,
+                                    "progress": (i / len(urls)) * 100,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    "client_id": client_id
+                                }
+                                await manager.send_personal_message(json.dumps(throttle_message), client_id)
+                            
+                            # Send progress update
+                            progress_message = {
+                                "type": "scrape_progress",
+                                "message": f"📄 Scraping {i+1}/{len(urls)}: {url}",
+                                "current_url": url,
+                                "progress": ((i+1) / len(urls)) * 100,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "client_id": client_id
+                            }
+                            await manager.send_personal_message(json.dumps(progress_message), client_id)
+                            
+                            # Call the existing URL ingestion endpoint with throttling metadata
+                            ingestion_data = {
+                                "url": url,
+                                "project": project,
+                                "tags": tags + ["chat-scraped", "web", "throttled"],
+                                "metadata": {
+                                    "scraped_via": "chat_interface",
+                                    "client_id": client_id,
+                                    "scraped_at": datetime.now(timezone.utc).isoformat(),
+                                    "throttle_settings": {
+                                        "delay_ms": delay_between_requests,
+                                        "respect_robots": respect_robots_txt,
+                                        "user_agent": user_agent
+                                    }
+                                }
+                            }
+                            
+                            # Respectful HTTP request with custom headers
+                            headers = {
+                                "User-Agent": user_agent
+                            }
+                            
+                            # Use internal Docker network for API calls
+                            api_url = "http://localhost:80/api/v1/ingestion/url"  # Internal container port
+                            
+                            async with httpx.AsyncClient(
+                                timeout=60.0, 
+                                headers=headers,
+                                follow_redirects=True
+                            ) as http_client:
+                                response = await http_client.post(
+                                    api_url,
+                                    json=ingestion_data
+                                )
+                                
+                                if response.status_code == 200:
+                                    result = response.json()
+                                    scrape_results.append({
+                                        "url": url,
+                                        "success": True,
+                                        "ingestion_id": result.get("ingestion_id"),
+                                        "message": "Successfully queued for processing",
+                                        "throttled": True
+                                    })
+                                    successful_scrapes += 1
+                                else:
+                                    scrape_results.append({
+                                        "url": url,
+                                        "success": False,
+                                        "error": f"HTTP {response.status_code}",
+                                        "message": "Failed to queue for processing"
+                                    })
+                                    
+                        except Exception as scrape_error:
+                            logger.error(f"Error scraping {url}: {scrape_error}")
+                            scrape_results.append({
+                                "url": url,
+                                "success": False,
+                                "error": str(scrape_error),
+                                "message": "Scraping failed"
+                            })
+                    
+                    # Send completion message
+                    completion_message = {
+                        "type": "scrape_completed",
+                        "message": f"✅ Scraping completed! {successful_scrapes}/{len(urls)} URLs successfully processed.",
+                        "total_urls": len(urls),
+                        "successful_scrapes": successful_scrapes,
+                        "failed_scrapes": len(urls) - successful_scrapes,
+                        "results": scrape_results,
+                        "project": project,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "client_id": client_id
+                    }
+                    await manager.send_personal_message(json.dumps(completion_message), client_id)
                     
                 else:
                     # Echo unknown message types

@@ -111,32 +111,32 @@ cat > "$ENV_TEMPLATE" << 'EOF'
 # FindersKeepers v2 MCP Knowledge Server Configuration
 # Copy this file to .env and adjust the values for your environment
 
-# PostgreSQL Configuration
-POSTGRES_URL=postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2
-POSTGRES_HOST=localhost
+# PostgreSQL Configuration (Docker containers)
+POSTGRES_URL=postgresql://finderskeepers:fk2025secure@fk2_postgres:5432/finderskeepers_v2
+POSTGRES_HOST=fk2_postgres
 POSTGRES_PORT=5432
 POSTGRES_USER=finderskeepers
 POSTGRES_PASSWORD=fk2025secure
 POSTGRES_DB=finderskeepers_v2
 
-# Neo4j Configuration
-NEO4J_URL=bolt://localhost:7687
+# Neo4j Configuration (Docker containers)
+NEO4J_URL=bolt://fk2_neo4j:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=fk2025neo4j
 
-# Qdrant Vector Database
-QDRANT_URL=http://localhost:6333
+# Qdrant Vector Database (Docker containers)
+QDRANT_URL=http://fk2_qdrant:6333
 
-# Redis Cache
-REDIS_URL=redis://localhost:6379
-REDIS_HOST=localhost
+# Redis Cache (Docker containers)
+REDIS_URL=redis://fk2_redis:6379
+REDIS_HOST=fk2_redis
 REDIS_PORT=6379
 
-# FastAPI Backend
-FASTAPI_URL=http://localhost:8000
+# FastAPI Backend (Docker containers)
+FASTAPI_URL=http://fk2_fastapi:8000
 
-# n8n Automation (for session logging)
-N8N_WEBHOOK_URL=http://localhost:5678
+# n8n Automation (Docker containers)
+N8N_WEBHOOK_URL=http://fk2_n8n:5678
 
 # AI API Keys (optional - for enhanced features)
 # OPENAI_API_KEY=your_openai_key_here

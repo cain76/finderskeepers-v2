@@ -71,6 +71,10 @@ class FormatDetector:
         '.cc': FileFormat.CPP,
         '.go': FileFormat.GO,
         '.rs': FileFormat.RUST,
+        
+        # Web
+        '.html': FileFormat.HTML,
+        '.htm': FileFormat.HTML,
     }
     
     # MIME type mappings
@@ -114,6 +118,10 @@ class FormatDetector:
         'application/x-tar': FileFormat.TAR,
         'application/gzip': FileFormat.GZ,
         'application/x-rar-compressed': FileFormat.RAR,
+        
+        # Web
+        'text/html': FileFormat.HTML,
+        'application/xhtml+xml': FileFormat.HTML,
     }
     
     # Format to processing method mapping
@@ -164,6 +172,9 @@ class FormatDetector:
         FileFormat.CPP: ProcessingMethod.LANGCHAIN_LOADER,
         FileFormat.GO: ProcessingMethod.LANGCHAIN_LOADER,
         FileFormat.RUST: ProcessingMethod.LANGCHAIN_LOADER,
+        
+        # Web - Use Unstructured.io for HTML (NOT CRAWL4AI to prevent MCP spawning)
+        FileFormat.HTML: ProcessingMethod.UNSTRUCTURED_IO,
     }
     
     def __init__(self):
@@ -324,6 +335,8 @@ class FormatDetector:
                     return FileFormat.XML
                 elif content.startswith('---\n') or '\n---\n' in content[:100]:
                     return FileFormat.YAML
+                elif content.lower().startswith('<!doctype html') or content.lower().startswith('<html'):
+                    return FileFormat.HTML
                 
             except:
                 pass

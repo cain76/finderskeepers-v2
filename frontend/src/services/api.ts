@@ -102,6 +102,12 @@ class ApiService {
     });
   }
 
+  async terminateSession(sessionId: string): Promise<ApiResponse<AgentSession>> {
+    return this.request(`/api/diary/sessions/${sessionId}/end`, {
+      method: 'PUT',
+    });
+  }
+
   // Document Management endpoints
   async getDocuments(params?: {
     page?: number;

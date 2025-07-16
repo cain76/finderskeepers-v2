@@ -1,0 +1,72 @@
+# Claude Code ignore patterns to prevent indexing large/unnecessary files
+
+# Node modules (all instances)
+**/node_modules/
+node_modules/
+
+# Large directories that cause hanging
+data/
+logs/
+backups/
+.git/objects/
+.git/logs/
+scripts/logs/
+
+# Docker volumes and build cache
+**/.docker/
+**/docker-data/
+
+# Large database files
+*.db
+*.sqlite
+*.dmp
+
+# Log files
+*.log
+*.out
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.cache
+
+# IDE files
+.vscode/
+.idea/
+
+# Python cache and virtual environments
+**/__pycache__/
+*.pyc
+*.pyo
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+**/env/
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.iso
+
+# Ignore large backup directories
+backups/*
+auto_backup_*/
+
+# Documentation and screenshots (optional)
+docs/
+screenshots/
+test-docs/
+
+# Package lock files (large)
+package-lock.json
+yarn.lock

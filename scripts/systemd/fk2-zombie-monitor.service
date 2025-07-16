@@ -1,0 +1,26 @@
+[Unit]
+Description=FindersKeepers v2 Zombie Process Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/media/cain/linux_storage/projects/finderskeepers-v2
+ExecStart=/media/cain/linux_storage/projects/finderskeepers-v2/scripts/zombie-monitor-daemon.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SendSIGKILL=yes
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

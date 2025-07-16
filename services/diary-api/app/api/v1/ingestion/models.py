@@ -67,6 +67,9 @@ class FileFormat(str, Enum):
     GO = "go"
     RUST = "rs"
     
+    # Web
+    HTML = "html"
+    
     # Other
     UNKNOWN = "unknown"
 
@@ -79,7 +82,7 @@ class ProcessingMethod(str, Enum):
     TESSERACT = "tesseract"
     WHISPER = "whisper"
     WHISPERX = "whisperx"
-    CRAWL4AI = "crawl4ai"
+    # CRAWL4AI = "crawl4ai"  # REMOVED: Prevented MCP server spawning
     CUSTOM = "custom"
 
 class IngestionRequest(BaseModel):

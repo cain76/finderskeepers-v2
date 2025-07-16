@@ -548,10 +548,20 @@ class DocumentProcessor:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            await process.communicate()
-            
-            if process.returncode != 0:
-                raise RuntimeError("ffmpeg audio extraction failed")
+            try:
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode != 0:
+                    raise RuntimeError(f"ffmpeg audio extraction failed: {stderr.decode()}")
+            finally:
+                # Ensure process is properly terminated if still running
+                if process.returncode is None:
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                        await process.wait()
             
             return audio_path
             

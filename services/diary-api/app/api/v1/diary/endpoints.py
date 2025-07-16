@@ -12,7 +12,7 @@ import os
 # Add the parent directory to the path so we can import from app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
-from app.database.queries import SessionQueries
+from app.database.queries import SessionQueries, ConversationQueries
 from pydantic import BaseModel, Field
 from uuid import uuid4
 
@@ -39,6 +39,16 @@ class ActionCreate(BaseModel):
     details: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Action details")
     files_affected: Optional[List[str]] = Field(default_factory=list, description="Files modified")
     success: bool = Field(default=True, description="Action success status")
+
+class ConversationMessageCreate(BaseModel):
+    """Create new conversation message"""
+    session_id: str = Field(..., description="Parent session ID")
+    message_type: str = Field(..., description="Message type: user_message, ai_response, system_message, tool_result")
+    content: str = Field(..., description="Full message content")
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context")
+    reasoning: Optional[str] = Field(None, description="AI reasoning process")
+    tools_used: Optional[List[str]] = Field(default_factory=list, description="Tools used in interaction")
+    files_referenced: Optional[List[str]] = Field(default_factory=list, description="Files referenced")
 
 # ========================================
 # AGENT SESSION ENDPOINTS
@@ -253,3 +263,93 @@ async def search_sessions(
 async def test_endpoint():
     """Simple test endpoint"""
     return {"message": "Test endpoint working"}
+
+# ========================================
+# CONVERSATION ENDPOINTS
+# ========================================
+
+@router.post("/conversations/messages")
+async def log_conversation_message(message: ConversationMessageCreate):
+    """Log a conversation message to the database"""
+    try:
+        message_id = f"msg_{uuid4().hex[:8]}"
+        
+        logger.info(f"Logging conversation message: {message_id} for session: {message.session_id}")
+        
+        # Log message to database
+        message_data = await ConversationQueries.log_conversation_message(
+            message_id=message_id,
+            session_id=message.session_id,
+            message_type=message.message_type,
+            content=message.content,
+            context=message.context,
+            reasoning=message.reasoning,
+            tools_used=message.tools_used,
+            files_referenced=message.files_referenced
+        )
+        
+        return {
+            "success": True,
+            "data": message_data,
+            "message": f"Conversation message {message_id} logged successfully",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to log conversation message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sessions/{session_id}/conversations")
+async def get_conversation_history(
+    session_id: str,
+    limit: int = 50,
+    message_types: Optional[str] = None
+):
+    """Get conversation history for a session"""
+    try:
+        logger.info(f"Getting conversation history for session: {session_id}")
+        
+        # Parse message types if provided
+        types_filter = None
+        if message_types:
+            types_filter = [t.strip() for t in message_types.split(",")]
+        
+        # Get conversation history from database
+        messages = await ConversationQueries.get_conversation_history(
+            session_id=session_id,
+            limit=limit,
+            message_types=types_filter
+        )
+        
+        return {
+            "success": True,
+            "data": messages,
+            "total_messages": len(messages),
+            "session_id": session_id,
+            "message": f"Retrieved {len(messages)} conversation messages",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get conversation history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sessions/{session_id}/conversations/summary")
+async def get_conversation_summary(session_id: str):
+    """Get conversation summary statistics for a session"""
+    try:
+        logger.info(f"Getting conversation summary for session: {session_id}")
+        
+        # Get conversation summary from database
+        summary = await ConversationQueries.get_conversation_summary(session_id)
+        
+        return {
+            "success": True,
+            "data": summary,
+            "message": f"Retrieved conversation summary for session {session_id}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get conversation summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

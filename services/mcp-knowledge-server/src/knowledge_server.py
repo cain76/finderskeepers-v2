@@ -1198,34 +1198,44 @@ async def monitor_parent_process():
     parent_pid = os.getppid()
     logger.info(f"👁️ Monitoring parent process PID: {parent_pid}")
     
+    # Fixed: Use event-driven parent monitoring instead of infinite loop
     try:
-        while True:
+        # Set up signal handlers for proper shutdown
+        def handle_shutdown():
+            logger.info("🚪 Parent process terminated, shutting down MCP server")
+            loop = asyncio.get_event_loop()
+            loop.create_task(shutdown_gracefully())
+        
+        async def shutdown_gracefully():
             try:
-                # Check if parent process still exists
-                if not psutil.pid_exists(parent_pid):
-                    logger.info("🚪 Parent process terminated, shutting down MCP server")
-                    await activity_logger.shutdown("parent_process_terminated")
-                    
-                    # Stop conversation monitoring
-                    global conversation_monitor
-                    if conversation_monitor:
-                        conversation_monitor.stop_monitoring()
-                    
-                    # Disconnect databases
+                await activity_logger.shutdown("parent_process_terminated")
+                
+                # Stop conversation monitoring
+                global conversation_monitor
+                if conversation_monitor:
+                    conversation_monitor.stop_monitoring()
+                
+                # Disconnect databases gracefully
+                try:
                     await postgres.disconnect()
                     await neo4j.disconnect()
                     await qdrant.disconnect()
                     await redis.disconnect()
-                    
-                    logger.info("👋 MCP server shutdown complete (parent terminated)")
-                    os._exit(0)  # Force exit since mcp.run() might be stuck
-                    
+                except Exception as db_error:
+                    logger.error(f"Database disconnect error: {db_error}")
+                
+                logger.info("👋 MCP server shutdown complete (parent terminated)")
             except Exception as e:
-                logger.error(f"Error checking parent process: {e}")
-            
-            # Check every 3 seconds (responsive but not too aggressive)
-            await asyncio.sleep(3)
-            
+                logger.error(f"Shutdown error: {e}")
+        
+        # Check parent exists once, then rely on signals
+        if not psutil.pid_exists(parent_pid):
+            logger.info("🚪 Parent process not found at startup")
+            await shutdown_gracefully()
+            return
+        
+        logger.info("✅ Parent process monitoring enabled (signal-based)")
+        
     except asyncio.CancelledError:
         logger.info("👁️ Parent process monitoring cancelled")
 

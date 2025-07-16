@@ -39,6 +39,7 @@ import {
   Refresh as RefreshIcon,
   PlayArrow as PlayIcon,
   Visibility as ViewIcon,
+  Delete as DeleteIcon,
   Psychology as SessionIcon,
   AccessTime as TimeIcon,
   Assignment as ActionIcon,
@@ -72,6 +73,8 @@ export default function AgentSessions() {
   const [selectedSession, setSelectedSession] = React.useState<AgentSession | null>(null);
   const [sessionActions, setSessionActions] = React.useState<AgentAction[]>([]);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [terminatingSessionId, setTerminatingSessionId] = React.useState<string | null>(null);
+  const [terminationError, setTerminationError] = React.useState<string | null>(null);
 
   const { subscribe } = useWebSocket();
 
@@ -150,6 +153,39 @@ export default function AgentSessions() {
       }
     } catch (error) {
       console.error('Failed to load session actions:', error);
+    }
+  };
+
+  // Handle session termination
+  const handleTerminateSession = async (sessionId: string) => {
+    // Clear any previous errors
+    setTerminationError(null);
+    
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      'Are you sure you want to end this session? This action cannot be undone.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      setTerminatingSessionId(sessionId);
+      
+      const response = await apiService.terminateSession(sessionId);
+      
+      if (response.success) {
+        // Refresh the sessions list to show updated status
+        await loadSessions();
+      } else {
+        setTerminationError(response.error || 'Failed to terminate session');
+      }
+    } catch (error) {
+      console.error('Failed to terminate session:', error);
+      setTerminationError(error instanceof Error ? error.message : 'Failed to terminate session');
+    } finally {
+      setTerminatingSessionId(null);
     }
   };
 
@@ -408,12 +444,34 @@ export default function AgentSessions() {
                           <ViewIcon />
                         </IconButton>
                       </Tooltip>
+                      {session.status === 'active' && (
+                        <Tooltip title="End Session">
+                          <IconButton 
+                            size="small"
+                            color="error"
+                            disabled={terminatingSessionId === session.session_id}
+                            onClick={() => handleTerminateSession(session.session_id)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
+          
+          {terminationError && (
+            <Alert 
+              severity="error" 
+              sx={{ mt: 2 }} 
+              onClose={() => setTerminationError(null)}
+            >
+              Failed to terminate session: {terminationError}
+            </Alert>
+          )}
           
           {filteredSessions.length === 0 && (
             <Alert severity="info" sx={{ mt: 2 }}>

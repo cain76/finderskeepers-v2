@@ -3,6 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 🎯 PROJECT ROADMAP
+
 **CRITICAL**: Always check `.claude/ROADMAP.md` for current project status, priorities, and next steps. This living document tracks our progress through all phases of FindersKeepers v2 development and contains critical architectural decisions.
 
 ## Project Overview
@@ -12,6 +13,7 @@ FindersKeepers v2 is a personal AI agent knowledge hub built with a containerize
 ## Development Commands
 
 ### Starting/Stopping Services
+
 ```bash
 # Start all services (recommended)
 ./scripts/start-all.sh
@@ -20,15 +22,16 @@ FindersKeepers v2 is a personal AI agent knowledge hub built with a containerize
 ./scripts/stop-all.sh
 
 # Start specific services
-docker-compose up -d fastapi
-docker-compose up -d postgres neo4j redis qdrant
+docker compose up -d fastapi
+docker compose up -d postgres neo4j redis qdrant
 
 # View logs
-docker-compose logs -f
-docker-compose logs -f fastapi  # specific service
+docker compose logs -f
+docker compose logs -f fastapi  # specific service
 ```
 
 ### Development & Testing
+
 ```bash
 # FastAPI development (requires Docker services running)
 cd services/diary-api
@@ -44,6 +47,7 @@ isort services/diary-api/
 ```
 
 ### MCP Session Management
+
 ```bash
 # Clean up stuck MCP Knowledge Server processes
 ./scripts/cleanup-mcp-sessions.sh
@@ -62,6 +66,7 @@ python src/knowledge_server.py
 ```
 
 ### Database Operations
+
 ```bash
 # PostgreSQL direct access
 docker exec -it fk2_postgres psql -U finderskeepers -d finderskeepers_v2
@@ -76,6 +81,7 @@ docker exec -it fk2_redis redis-cli
 ## Architecture
 
 ### Core Services
+
 - **FastAPI Backend** (`services/diary-api/`) - API endpoints for agent session tracking, knowledge queries, and document management
 - **PostgreSQL + pgvector** - Vector embeddings, relational data, and document storage
 - **Neo4j** - Knowledge graph for entity relationships and context linking
@@ -84,6 +90,7 @@ docker exec -it fk2_redis redis-cli
 - **n8n** - Workflow automation for agent coordination
 
 ### Key Data Models
+
 - **AgentSession**: Tracks individual AI agent interactions with context
 - **AgentAction**: Logs specific actions within sessions (file edits, commands, etc.)
 - **DocumentIngest**: Handles knowledge base document storage and indexing
@@ -91,7 +98,9 @@ docker exec -it fk2_redis redis-cli
 - **ConfigChange**: Tracks system configuration changes with rollback capability
 
 ### Database Schema
+
 The PostgreSQL schema (`config/pgvector/init.sql`) includes:
+
 - `agent_sessions` - Session tracking with JSONB context
 - `agent_actions` - Action logging with file tracking
 - `documents` - Document storage with vector embeddings
@@ -102,16 +111,19 @@ The PostgreSQL schema (`config/pgvector/init.sql`) includes:
 ## API Endpoints
 
 ### Agent Session Management
+
 - `POST /api/diary/sessions` - Create new agent session
 - `POST /api/diary/actions` - Log agent actions
 - `GET /api/diary/search` - Search session history
 
 ### Knowledge Management
+
 - `POST /api/knowledge/query` - Natural language knowledge queries
 - `POST /api/docs/ingest` - Ingest new documentation
 - `GET /api/docs/context` - Get project-specific context
 
 ### Configuration Tracking
+
 - `POST /api/config/log-change` - Log configuration changes
 - `GET /api/config/history` - Retrieve change history
 
@@ -119,19 +131,21 @@ The PostgreSQL schema (`config/pgvector/init.sql`) includes:
 
 1. **Environment Setup**: Copy `.env.example` to `.env` and configure API keys
 2. **Service Dependencies**: Always start database services before FastAPI
-3. **Development Mode**: Use `docker-compose up -d postgres neo4j redis qdrant` then run FastAPI locally
+3. **Development Mode**: Use `docker compose up -d postgres neo4j redis qdrant` then run FastAPI locally
 4. **Testing**: Ensure all services are running before running tests
 5. **Database Changes**: Update `config/pgvector/init.sql` for schema changes
 
 ## Key Configuration
 
 ### Service URLs (Local Development)
+
 - FastAPI: http://localhost:8000
 - n8n: http://localhost:5678 (admin/finderskeepers2025)
 - Neo4j: http://localhost:7474 (neo4j/fk2025neo4j)
 - Qdrant: http://localhost:6333
 
 ### Environment Variables Required
+
 - `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY` - AI service keys
 - `POSTGRES_PASSWORD=fk2025secure` - Database password
 - `NEO4J_PASSWORD=fk2025neo4j` - Neo4j password
@@ -139,27 +153,32 @@ The PostgreSQL schema (`config/pgvector/init.sql`) includes:
 ## Common Issues
 
 ### Port Conflicts
+
 Check for conflicts on ports 5432, 5678, 6333, 6379, 7474, 7687, 8000
 
 ### Database Connection Issues
-- Reset: `docker-compose down -v && docker-compose up -d`
-- Check logs: `docker-compose logs postgres`
+
+- Reset: `docker compose down -v && docker compose up -d`
+- Check logs: `docker compose logs postgres`
 
 ### Memory Issues
+
 - Minimum 8GB RAM recommended
 - Adjust memory limits in `docker-compose.yml`
 
 ## Docker Authentication & Monitoring
 
 ### Docker Registry Login
+
 ```bash
 # Docker credentials are in .env file (DOCKER_USERNAME, DOCKER_TOKEN)
 # Use environment variables instead of docker login due to pass store issues:
-export DOCKER_USERNAME=your_docker_username
+export DOCKER_USERNAME=bitcainnet
 export DOCKER_TOKEN=your_docker_token_from_env
 ```
 
 ### Portainer Docker Monitoring
+
 ```bash
 # Install Portainer for visual Docker monitoring:
 docker volume create portainer_data

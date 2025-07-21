@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS agent_actions (
     action_type VARCHAR(100) NOT NULL,
     description TEXT NOT NULL,
     details JSONB DEFAULT '{}',
-    files_affected TEXT[] DEFAULT '{}',
+    files_affected JSONB DEFAULT '[]',
     success BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     content TEXT NOT NULL,
     context JSONB DEFAULT '{}', -- Additional context like emotional tone, urgency, topic changes
     reasoning TEXT, -- AI reasoning process and decision-making (for AI responses)
-    tools_used TEXT[] DEFAULT '{}', -- List of tools used in this interaction
-    files_referenced TEXT[] DEFAULT '{}', -- Files mentioned or referenced in the message
+    tools_used JSONB DEFAULT '[]', -- List of tools used in this interaction
+    files_referenced JSONB DEFAULT '[]', -- Files mentioned or referenced in the message
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     sequence_number INTEGER, -- Order within the session
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
-    embedding vector(1536), -- OpenAI text-embedding-3-small dimension
+    embedding vector(1024), -- mxbai-embed-large dimension
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -193,7 +193,7 @@ CREATE TRIGGER update_knowledge_entities_updated_at
 
 -- Function for vector similarity search
 CREATE OR REPLACE FUNCTION search_similar_chunks(
-    query_embedding vector(1536),
+    query_embedding vector(1024),
     similarity_threshold float DEFAULT 0.7,
     max_results int DEFAULT 10,
     filter_project text DEFAULT NULL

@@ -80,21 +80,24 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://fk2_fastapi/api/diary/sessions",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n    \"agent_type\": \"{{ $('Transform Session Data').item.json.agent_type }}\",\n    \"user_id\": \"{{ $('Transform Session Data').item.json.user_id }}\",\n    \"project\": \"{{ $('Transform Session Data').item.json.project }}\",\n    \"context\": {{ JSON.stringify($('Transform Session Data').item.json.context) }}\n}",
+        "operation": "executeQuery",
+        "query": "INSERT INTO agent_sessions (\n    agent_type, \n    user_id, \n    project, \n    context, \n    status,\n    start_time\n) VALUES (\n    '{{ $('Transform Session Data').item.json.agent_type }}',\n    '{{ $('Transform Session Data').item.json.user_id }}',\n    '{{ $('Transform Session Data').item.json.project }}',\n    '{{ JSON.stringify($('Transform Session Data').item.json.context || {}) }}',\n    'active',\n    NOW()\n) RETURNING session_id",
         "options": {}
       },
       "id": "3d0d3f6f-b734-489a-965a-2f6311bc82d5",
-      "name": "Notify FastAPI",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Create Session in Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
       "position": [
         -240,
         260
-      ]
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "finderskeepers_postgres", 
+          "name": "FindersKeepers PostgreSQL"
+        }
+      }
     },
     {
       "parameters": {
@@ -115,7 +118,7 @@
             {
               "id": "session_id",
               "name": "session_id",
-              "value": "={{ $('Notify FastAPI').item.json.data.session_id }}",
+              "value": "={{ $('Create Session in Database').item.json.session_id }}",
               "type": "string"
             }
           ]
@@ -174,21 +177,192 @@
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "=http://fk2_fastapi/api/diary/sessions/{{ $('Transform Session End Data').item.json.session_id }}/end",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n    \"reason\": \"{{ $('Transform Session End Data').item.json.reason }}\",\n    \"end_time\": \"{{ $('Transform Session End Data').item.json.end_time }}\",\n    \"webhook_termination\": true\n}",
+        "operation": "executeQuery",
+        "query": "SELECT \n    session_id,\n    message_type,\n    content,\n    context,\n    reasoning,\n    tools_used,\n    files_referenced,\n    created_at\nFROM conversation_messages \nWHERE session_id = '{{ $('Transform Session End Data').item.json.session_id }}'\nORDER BY sequence_number ASC",
         "options": {}
       },
-      "id": "4d8f7a23-6e19-4c90-b567-8a9cd2e7f012",
-      "name": "End Session in FastAPI",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Get Session Conversations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
       "position": [
         -240,
         460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "finderskeepers_postgres", 
+          "name": "FindersKeepers PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session_id",
+              "name": "session_id",
+              "value": "={{ $('Transform Session End Data').item.json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "conversation_messages",
+              "name": "conversation_messages", 
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "total_messages",
+              "name": "total_messages",
+              "value": "={{ $items('Get Session Conversations').length }}",
+              "type": "number"
+            },
+            {
+              "id": "end_time",
+              "name": "end_time",
+              "value": "={{ $('Transform Session End Data').item.json.end_time }}",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "reason",
+              "value": "={{ $('Transform Session End Data').item.json.reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Prepare Conversation Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -40,
+        460
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_messages",
+              "leftValue": "={{ $json.total_messages }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "h8i9j0k1-l2m3-4567-hijk-890123456789",
+      "name": "Check If Messages Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        80,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "conversation_messages",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Split Conversation Messages",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        280,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversation_messages (\n    message_id,\n    session_id, \n    message_type, \n    content, \n    context, \n    reasoning, \n    tools_used, \n    files_referenced\n) VALUES (\n    'msg_' || extract(epoch from now()) || '_' || substr(md5(random()::text), 1, 8),\n    '{{ $json.session_id }}',\n    '{{ $json.message_type }}',\n    '{{ $json.content }}',\n    '{{ JSON.stringify($json.context || {}) }}',\n    '{{ $json.reasoning || \"\" }}',\n    '{{ JSON.stringify($json.tools_used || []) }}',\n    '{{ JSON.stringify($json.files_referenced || []) }}'\n)",
+        "options": {}
+      },
+      "id": "d4e5f6g7-h8i9-0123-defg-456789012345",
+      "name": "Log Individual Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        360,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "finderskeepers_postgres", 
+          "name": "FindersKeepers PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "no_more_messages", 
+              "leftValue": "={{ $json.total_messages || 0 }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5f6g7h8-i9j0-1234-efgh-567890123456",
+      "name": "Check If All Messages Processed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        560,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE agent_sessions \nSET \n    status = 'ended',\n    end_time = '{{ $('Transform Session End Data').item.json.end_time }}',\n    termination_reason = '{{ $('Transform Session End Data').item.json.reason }}',\n    updated_at = NOW()\nWHERE session_id = '{{ $json.session_id }}' AND status = 'active'",
+        "options": {}
+      },
+      "id": "f6g7h8i9-j0k1-2345-fghi-678901234567",
+      "name": "End Session in Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        760,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "finderskeepers_postgres", 
+          "name": "FindersKeepers PostgreSQL"
+        }
+      }
     },
     {
       "parameters": {
@@ -203,32 +377,38 @@
             {
               "id": "message",
               "name": "message",
-              "value": "Session terminated successfully",
+              "value": "=Session {{ $('Prepare Conversation Data').item.json.session_id }} terminated successfully with {{ $('Prepare Conversation Data').item.json.total_messages }} conversation messages logged",
               "type": "string"
             },
             {
               "id": "session_id",
               "name": "session_id",
-              "value": "={{ $('Transform Session End Data').item.json.session_id }}",
+              "value": "={{ $('Prepare Conversation Data').item.json.session_id }}",
               "type": "string"
             },
             {
               "id": "reason",
               "name": "reason",
-              "value": "={{ $('Transform Session End Data').item.json.reason }}",
+              "value": "={{ $('Prepare Conversation Data').item.json.reason }}",
               "type": "string"
+            },
+            {
+              "id": "messages_logged",
+              "name": "messages_logged",
+              "value": "={{ $('Prepare Conversation Data').item.json.total_messages }}",
+              "type": "number"
             }
           ]
         },
         "options": {}
       },
-      "id": "9e67f2a4-8b21-4d89-a456-7c9ff3e8b012",
+      "id": "g7h8i9j0-k1l2-3456-ghij-789012345678",
       "name": "Session End Response",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -40,
-        460
+        960,
+        380
       ]
     }
   ],
@@ -260,7 +440,7 @@
       "main": [
         [
           {
-            "node": "Notify FastAPI",
+            "node": "Create Session in Database",
             "type": "main",
             "index": 0
           }
@@ -271,14 +451,14 @@
       "main": [
         [
           {
-            "node": "End Session in FastAPI",
+            "node": "Get Session Conversations",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notify FastAPI": {
+    "Create Session in Database": {
       "main": [
         [
           {
@@ -289,7 +469,87 @@
         ]
       ]
     },
-    "End Session in FastAPI": {
+    "Get Session Conversations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Conversation Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Conversation Data": {
+      "main": [
+        [
+          {
+            "node": "Check If Messages Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Messages Exist": {
+      "main": [
+        [
+          {
+            "node": "Split Conversation Messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End Session in Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Conversation Messages": {
+      "main": [
+        [
+          {
+            "node": "Log Individual Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Individual Message": {
+      "main": [
+        [
+          {
+            "node": "Check If All Messages Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If All Messages Processed": {
+      "main": [
+        [
+          {
+            "node": "End Session in Database",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Conversation Messages",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End Session in Database": {
       "main": [
         [
           {

@@ -33,7 +33,7 @@ class RedisVectorCache:
         # Configuration
         self.similarity_threshold = 0.9
         self.cache_ttl = 3600  # 1 hour
-        self.max_vector_dimension = 1536  # mxbai-embed-large
+        self.max_vector_dimension = 1024  # mxbai-embed-large
         
     async def _get_client(self, db: int = 0) -> redis.Redis:
         """Get Redis client for specific database"""

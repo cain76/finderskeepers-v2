@@ -29,6 +29,7 @@ from database.qdrant_client import QdrantClient
 from database.redis_client import RedisClient
 from activity_logger import activity_logger
 from conversation_monitor import setup_conversation_monitoring
+from conversation_logging_middleware import initialize_conversation_middleware, get_conversation_middleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +54,34 @@ parent_process_monitor_task = None
 # TOOLS - Agent-callable functions
 # ========================================
 
+# Universal middleware wrapper for all MCP tools
+async def _log_tool_call(tool_name: str, params: Dict[str, Any], result: Any = None):
+    """Universal middleware logging for all MCP tool calls"""
+    try:
+        middleware = get_conversation_middleware()
+        if middleware and activity_logger.session_id:
+            # Log the request (user intent)
+            await middleware.on_message(
+                message={
+                    "method": tool_name,
+                    "params": params
+                },
+                session_id=activity_logger.session_id
+            )
+            
+            # If we have a result, log the response
+            if result is not None:
+                await middleware.on_message(
+                    message={
+                        "result": result,
+                        "type": "response"
+                    },
+                    session_id=activity_logger.session_id
+                )
+                
+    except Exception as e:
+        logger.error(f"Error in universal tool logging: {e}")
+
 @mcp.tool()
 async def search_documents(
     query: str,
@@ -74,6 +103,12 @@ async def search_documents(
     Returns:
         Dictionary with search results, metadata, and search statistics
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("search_documents", {
+        "query": query, "project": project, "tags": tags, 
+        "limit": limit, "min_score": min_score
+    })
+    
     try:
         logger.info(f"🔍 Searching documents: '{query}' (project: {project}, tags: {tags})")
         
@@ -130,6 +165,9 @@ async def search_documents(
             result=result
         )
         
+        # Log the successful result through universal middleware
+        await _log_tool_call("search_documents", {}, result)
+        
         return result
         
     except Exception as e:
@@ -161,6 +199,12 @@ async def query_knowledge_graph(
     Returns:
         Graph query results with entities, relationships, and insights
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("query_knowledge_graph", {
+        "question": question, "entity_types": entity_types,
+        "max_depth": max_depth, "limit": limit
+    })
+    
     try:
         logger.info(f"🧠 Querying knowledge graph: '{question}'")
         
@@ -195,6 +239,9 @@ async def query_knowledge_graph(
             arguments={"question": question, "entity_types": entity_types},
             result=result
         )
+        
+        # Log the successful result through universal middleware
+        await _log_tool_call("query_knowledge_graph", {}, result)
         
         return result
         
@@ -232,6 +279,13 @@ async def get_full_conversation_context(
     Returns:
         Complete session context with actions, conversation history, metadata, and file changes
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("get_full_conversation_context", {
+        "session_id": session_id, "agent_type": agent_type, "project": project,
+        "recent_actions": recent_actions, "include_files": include_files, 
+        "include_conversation_history": include_conversation_history, "conversation_limit": conversation_limit
+    })
+    
     try:
         logger.info(f"📋 Getting session context: {session_id or 'recent sessions'}")
         
@@ -263,29 +317,12 @@ async def get_full_conversation_context(
         # Get conversation history if requested
         conversation_messages = []
         conversation_summary = {}
-        if include_conversation_history and actions:
-            # Filter actions to get conversation messages
-            conversation_actions = [
-                action for action in actions 
-                if action.get("action_type", "").startswith("conversation:")
-            ]
-            
-            # Process conversation messages with full context
-            for conv_action in conversation_actions[:conversation_limit]:
-                details = conv_action.get("details", {})
-                conversation_messages.append({
-                    "message_id": conv_action.get("action_id"),
-                    "timestamp": conv_action.get("timestamp"),
-                    "message_type": details.get("message_type"),
-                    "content": details.get("full_content", ""),
-                    "content_length": details.get("content_length", 0),
-                    "emotional_indicators": details.get("emotional_indicators", []),
-                    "topic_keywords": details.get("topic_keywords", []),
-                    "tools_used": details.get("tools_used", []),
-                    "files_referenced": details.get("files_referenced", []),
-                    "reasoning": details.get("reasoning"),
-                    "context": details.get("context", {})
-                })
+        if include_conversation_history and session_id:
+            # Get conversation messages directly from database
+            conversation_messages = await postgres.get_conversation_messages(
+                session_id=session_id,
+                limit=conversation_limit
+            )
             
             # Generate conversation summary
             user_messages = [m for m in conversation_messages if m["message_type"] == "user_message"]
@@ -302,7 +339,7 @@ async def get_full_conversation_context(
                 "last_ai_response": ai_responses[0]["content"][:200] if ai_responses else None
             }
         
-        return {
+        result = {
             "session": session,
             "actions": actions,
             "file_changes": file_changes if include_files else [],
@@ -324,12 +361,28 @@ async def get_full_conversation_context(
             "timestamp": datetime.utcnow().isoformat()
         }
         
+        # Log the successful result through universal middleware
+        await _log_tool_call("get_full_conversation_context", {}, result)
+        
+        return result
+        
     except Exception as e:
         logger.error(f"Session context retrieval failed: {e}")
         return {
             "error": str(e),
             "session": None,
             "actions": [],
+            "file_changes": [],
+            "conversation_history": [],
+            "conversation_summary": {},
+            "summary": {
+                "session_id": None,
+                "agent_type": None,
+                "project": None,
+                "action_count": 0,
+                "files_affected": 0,
+                "success_rate": 0
+            },
             "timestamp": datetime.utcnow().isoformat()
         }
 
@@ -352,6 +405,12 @@ async def analyze_document_similarity(
     Returns:
         List of similar documents with similarity scores and metadata
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("analyze_document_similarity", {
+        "document_id": document_id, "similarity_threshold": similarity_threshold,
+        "limit": limit, "include_content": include_content
+    })
+    
     try:
         logger.info(f"🔗 Analyzing similarity for document: {document_id}")
         
@@ -392,7 +451,7 @@ async def analyze_document_similarity(
         # Get reference document metadata
         reference_doc = await postgres.get_document_metadata(document_id)
         
-        return {
+        result = {
             "reference_document": {
                 "document_id": document_id,
                 "metadata": reference_doc
@@ -406,6 +465,11 @@ async def analyze_document_similarity(
             },
             "timestamp": datetime.utcnow().isoformat()
         }
+        
+        # Log the successful result through universal middleware
+        await _log_tool_call("analyze_document_similarity", {}, result)
+        
+        return result
         
     except Exception as e:
         logger.error(f"Document similarity analysis failed: {e}")
@@ -433,8 +497,34 @@ async def initialize_claude_session(
     Returns:
         Session information with current project status and recent activity summary
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("initialize_claude_session", {
+        "user_id": user_id, "project": project, "context": context
+    })
+    
     try:
         logger.info(f"🚀 Initializing Claude Code session for project: {project}")
+        
+        # CRITICAL FIX: Check for active sessions first before creating a new one
+        active_sessions = await postgres.get_active_sessions(project=project, limit=1)
+        
+        if active_sessions:
+            active_session = active_sessions[0]
+            logger.info(f"🔄 Found active session: {active_session['session_id']}, returning existing session")
+            
+            # Return information about the active session instead of creating a new one
+            return {
+                "session_id": active_session['session_id'],
+                "status": "existing_session",
+                "project": project,
+                "current_context": await get_full_conversation_context(
+                    session_id=active_session['session_id'],
+                    include_files=True,
+                    include_conversation_history=True
+                ),
+                "message": f"✅ Using existing active session {active_session['session_id'][-8:]}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
         
         # Create session data for Claude Code
         session_context = {
@@ -472,6 +562,9 @@ async def initialize_claude_session(
             
             if not session_id:
                 session_id = f"claude_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                
+        # Set the session ID in the activity logger for tracking
+        activity_logger.set_session_id(session_id)
                 
         # Get current project context and recent activity with FULL conversation history
         context_data = await get_full_conversation_context(
@@ -588,6 +681,12 @@ async def log_conversation_message(
     Returns:
         Message logging confirmation with message_id
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("log_conversation_message", {
+        "session_id": session_id, "message_type": message_type, "content": content[:100],
+        "context": context, "reasoning": reasoning, "tools_used": tools_used, "files_referenced": files_referenced
+    })
+    
     try:
         logger.info(f"💬 Logging conversation message: {message_type} for session {session_id}")
         
@@ -619,24 +718,41 @@ async def log_conversation_message(
                 # Exit was detected and processed, add this to the message details
                 message_data["details"]["exit_command_detected"] = True
         
-        # Call n8n Agent Action Tracker webhook for conversation logging
-        import httpx
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{activity_logger.n8n_webhook_url}/webhook/agent-actions",
-                json=message_data,
-                timeout=10.0
+        # Generate message ID first
+        message_id = f"msg_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
+        # Store directly to database first (critical for data persistence)
+        try:
+            await postgres.create_conversation_message(
+                message_id=message_id,
+                session_id=session_id,
+                message_type=message_type,
+                content=content,
+                context=context,
+                reasoning=reasoning,
+                tools_used=tools_used,
+                files_referenced=files_referenced
             )
-            
-            message_id = None
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and len(result) > 0:
-                    message_response = result[0]
-                    message_id = message_response.get("action_id")
-            
-            if not message_id:
-                message_id = f"msg_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            logger.info(f"✅ Conversation message {message_id} stored to database")
+        except Exception as db_error:
+            logger.error(f"Database storage failed for message {message_id}: {db_error}")
+        
+        # Call n8n Agent Action Tracker webhook for conversation logging (secondary)
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{activity_logger.n8n_webhook_url}/webhook/agent-actions",
+                    json={**message_data, "action_id": message_id},
+                    timeout=10.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Conversation message {message_id} sent to n8n webhook")
+                else:
+                    logger.warning(f"n8n webhook failed for message {message_id}: {response.status_code}")
+        except Exception as webhook_error:
+            logger.warning(f"n8n webhook error for message {message_id}: {webhook_error}")
         
         return {
             "message_id": message_id,
@@ -1017,26 +1133,93 @@ async def check_pending_operations(session_id: str) -> bool:
     except:
         return False
 
+async def cleanup_zombie_sessions(max_age_hours: int = 6, dry_run: bool = False) -> Dict[str, Any]:
+    """
+    Clean up zombie sessions that have been active for too long
+    
+    Args:
+        max_age_hours: Maximum age in hours before a session is considered zombie
+        dry_run: If True, only identify zombie sessions without ending them
+        
+    Returns:
+        Dictionary with cleanup results
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get active sessions older than max_age_hours
+        cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)
+        
+        # Get all active sessions
+        active_sessions = await postgres.get_active_sessions(limit=100)
+        
+        zombie_sessions = []
+        for session in active_sessions:
+            start_time = session.get('start_time')
+            if start_time and start_time < cutoff_time:
+                zombie_sessions.append(session)
+        
+        if dry_run:
+            return {
+                "dry_run": True,
+                "zombie_sessions_found": len(zombie_sessions),
+                "zombie_sessions": [s['session_id'] for s in zombie_sessions],
+                "cutoff_time": cutoff_time.isoformat()
+            }
+        
+        # End zombie sessions
+        ended_sessions = []
+        for session in zombie_sessions:
+            session_id = session['session_id']
+            logger.info(f"🧹 Ending zombie session: {session_id}")
+            
+            # Mark session as ended
+            await postgres.end_session(session_id, reason="zombie_cleanup")
+            ended_sessions.append(session_id)
+        
+        logger.info(f"🧹 Cleaned up {len(ended_sessions)} zombie sessions")
+        
+        return {
+            "success": True,
+            "zombie_sessions_found": len(zombie_sessions),
+            "zombie_sessions_ended": len(ended_sessions),
+            "ended_sessions": ended_sessions,
+            "cutoff_time": cutoff_time.isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Zombie session cleanup failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "zombie_sessions_ended": 0
+        }
+
 async def export_session_context(session_id: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
     """Export session context as a searchable document"""
     try:
         # Create a comprehensive document from session context
         document_content = generate_session_document(session_id, session_context)
         
-        # Store in PostgreSQL as a searchable document
+        # Store as a searchable document (using existing document storage method)
         document_id = f"session_{session_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
         
-        await postgres.ingest_document(
-            document_id=document_id,
-            title=f"Session Context: {session_id}",
-            content=document_content,
-            project="finderskeepers-v2",
-            tags=["session_context", "conversation_history", "agent_actions"],
-            metadata={
-                "session_id": session_id,
-                "document_type": "session_export",
-                "export_timestamp": datetime.utcnow().isoformat()
-            }
+        # For now, store in Redis as cache - in production this would go to proper document storage
+        await redis.setex(
+            f"session_document:{document_id}",
+            86400,  # 24 hours
+            json.dumps({
+                "document_id": document_id,
+                "title": f"Session Context: {session_id}",
+                "content": document_content,
+                "project": "finderskeepers-v2",
+                "tags": ["session_context", "conversation_history", "agent_actions"],
+                "metadata": {
+                    "session_id": session_id,
+                    "document_type": "session_export",
+                    "export_timestamp": datetime.utcnow().isoformat()
+                }
+            })
         )
         
         return {
@@ -1163,6 +1346,12 @@ async def log_claude_action(
     Returns:
         Action logging confirmation with action_id
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("log_claude_action", {
+        "session_id": session_id, "action_type": action_type, "description": description,
+        "files_affected": files_affected, "details": details, "success": success, "error_message": error_message
+    })
+    
     try:
         logger.info(f"📝 Logging Claude action: {action_type} for session {session_id}")
         
@@ -1178,24 +1367,40 @@ async def log_claude_action(
         if error_message:
             action_data["details"]["error_message"] = error_message
         
-        # Call n8n Agent Action Tracker webhook
-        import httpx
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{activity_logger.n8n_webhook_url}/webhook/agent-actions",
-                json=action_data,
-                timeout=10.0
+        # Generate action ID first
+        action_id = f"action_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
+        # Store directly to database first (critical for data persistence)
+        try:
+            await postgres.create_action(
+                action_id=action_id,
+                session_id=session_id,
+                action_type=action_type,
+                description=description,
+                details=details or {},
+                files_affected=files_affected or [],
+                success=success
             )
-            
-            action_id = None
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and len(result) > 0:
-                    action_response = result[0]
-                    action_id = action_response.get("action_id")
-            
-            if not action_id:
-                action_id = f"action_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            logger.info(f"✅ Action {action_id} stored to database")
+        except Exception as db_error:
+            logger.error(f"Database storage failed for action {action_id}: {db_error}")
+        
+        # Call n8n Agent Action Tracker webhook (secondary)
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{activity_logger.n8n_webhook_url}/webhook/agent-actions",
+                    json={**action_data, "action_id": action_id},
+                    timeout=10.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Action {action_id} sent to n8n webhook")
+                else:
+                    logger.warning(f"n8n webhook failed for action {action_id}: {response.status_code}")
+        except Exception as webhook_error:
+            logger.warning(f"n8n webhook error for action {action_id}: {webhook_error}")
         
         return {
             "action_id": action_id,
@@ -1221,7 +1426,7 @@ async def log_claude_action(
 async def resume_session(
     project: str = "finderskeepers-v2",
     quick_summary: bool = True,
-    auto_initialize: bool = True
+    auto_initialize: bool = False
 ) -> Dict[str, Any]:
     """
     🚀 Smart session resumption with automatic context loading and continuation recommendations.
@@ -1241,25 +1446,57 @@ async def resume_session(
     Returns:
         Complete session resume information with context, recommendations, and new session ID
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("resume_session", {
+        "project": project, "quick_summary": quick_summary, "auto_initialize": auto_initialize
+    })
+    
     try:
         logger.info(f"🔄 Resuming session for project: {project}")
         
-        # Step 1: Try Redis cache first for instant results
+        # Step 1: Check for active sessions first - CRITICAL FIX
+        active_sessions = await postgres.get_active_sessions(project=project, limit=1)
+        
+        if active_sessions:
+            active_session = active_sessions[0]
+            logger.info(f"🔄 Found active session: {active_session['session_id']}")
+            
+            # Return information about the active session instead of creating a new one
+            return {
+                "status": "active_session_found",
+                "message": f"📍 Active session {active_session['session_id'][-8:]} already running. Continuing with existing session.",
+                "active_session": active_session,
+                "recommendations": ["🎯 Continue current work", "📋 Check recent actions", "🔍 Review session progress"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        # Step 2: Try Redis cache first for instant results if no active session
         cached_resume_info = await redis.get(f"session_resume:{project}")
         
-        if cached_resume_info and quick_summary:
+        if cached_resume_info:
             cached_data = json.loads(cached_resume_info)
-            logger.info("⚡ Using cached resume information")
+            logger.info("⚡ Using cached resume information from endsession")
             
-            # Still initialize new session if requested
+            # Only initialize new session if requested AND no active session
             if auto_initialize:
                 new_session_result = await initialize_claude_session(project=project)
                 cached_data["new_session"] = new_session_result
                 
-            return cached_data
+            # Add instructions for full context if needed
+            if quick_summary:
+                cached_data["full_context_available"] = True
+                cached_data["full_context_command"] = f"get_full_conversation_context(session_id='{cached_data.get('previous_session_id')}')"
+                
+            return {
+                "status": "session_resumed",
+                "message": f"📋 Resuming from session {cached_data.get('previous_session_id', 'unknown')[-8:]}",
+                **cached_data,
+                "timestamp": datetime.utcnow().isoformat()
+            }
         
-        # Step 2: Get latest session from database
-        latest_session = await postgres.get_latest_session_with_full_context(project)
+        # Step 3: Get latest completed session from database
+        recent_completed_sessions = await postgres.get_recent_completed_sessions(project=project, limit=1)
+        latest_session = recent_completed_sessions[0] if recent_completed_sessions else None
         
         if not latest_session:
             logger.info("🌱 No previous session found, starting fresh")
@@ -1276,95 +1513,43 @@ async def resume_session(
             else:
                 return {"message": "No previous session found. Ready to start fresh!"}
         
-        # Step 3: Generate comprehensive resume context
+        # Step 4: Basic resume info without expensive processing
         session_id = latest_session["session_id"]
-        actions = latest_session.get("actions", [])
         
-        # Analyze recent actions for context
-        recent_actions = actions[:10]  # Last 10 actions
-        successful_actions = [a for a in recent_actions if a.get("success", True)]
-        failed_actions = [a for a in recent_actions if not a.get("success", True)]
+        # Get minimal session data for fallback
+        actions = await postgres.get_session_actions(session_id, limit=5)
+        conversation_count = await postgres.get_conversation_message_count(session_id)
         
-        # Generate action summary
-        actions_summary = generate_detailed_actions_summary(recent_actions)
-        
-        # Get files that were modified
-        files_modified = await postgres.get_files_affected_by_session(session_id)
-        
-        # Generate intelligent next steps
-        next_steps = generate_intelligent_next_steps(latest_session, actions)
-        
-        # Calculate session statistics
-        success_rate = len(successful_actions) / len(recent_actions) if recent_actions else 0
-        
-        # Analyze conversation flow for emotional context
-        conversation_flow = analyze_session_conversation_flow(actions)
-        
-        # Generate completion status
-        completion_status = analyze_session_completion_status(actions)
-        
-        # Create comprehensive resume data
         resume_data = {
             "status": "session_resumed",
-            "previous_session": {
-                "session_id": session_id,
-                "started_at": latest_session.get("started_at"),
-                "ended_at": latest_session.get("ended_at"),
-                "duration": calculate_session_duration(latest_session),
-                "agent_type": latest_session.get("agent_type", "claude-code")
-            },
-            "session_analysis": {
+            "message": f"📋 Resuming from session {session_id[-8:]} (no cached summary)",
+            "previous_session_id": session_id,
+            "ended_at": latest_session.get("end_time"),
+            "session_stats": {
                 "total_actions": len(actions),
-                "successful_actions": len(successful_actions),
-                "failed_actions": len(failed_actions),
-                "success_rate": success_rate,
-                "completion_status": completion_status,
-                "conversation_flow": conversation_flow
+                "conversation_messages": conversation_count,
+                "success_rate": 0  # Can't calculate without full processing
             },
-            "recent_work": {
-                "actions_summary": actions_summary,
-                "files_modified": files_modified,
-                "last_action": recent_actions[0] if recent_actions else None,
-                "last_successful_action": successful_actions[0] if successful_actions else None,
-                "last_failed_action": failed_actions[0] if failed_actions else None
+            "continuation_context": {
+                "last_actions": actions[:3],
+                "recent_files": [],
+                "unresolved_issues": [],
+                "key_achievements": []
             },
-            "continuation_guidance": {
-                "next_steps": next_steps,
-                "recommendations": generate_continuation_recommendations_enhanced(latest_session, actions),
-                "priority_items": identify_priority_items(actions, files_modified),
-                "warnings": identify_session_warnings(actions, failed_actions)
+            "next_session_preparation": {
+                "recommended_actions": ["🔍 Use get_full_conversation_context for detailed history"],
+                "priority_items": ["📋 Review recent actions", "🔍 Check file changes"],
+                "warnings": ["⚠️ Session ended without proper cleanup - summary may be incomplete"]
             },
-            "context_loaded": True,
+            "full_context_available": True,
+            "full_context_command": f"get_full_conversation_context(session_id='{session_id}')",
             "timestamp": datetime.utcnow().isoformat()
         }
         
-        # Step 4: Cache the resume information for quick access
-        await redis.setex(f"session_resume:{project}", 3600, json.dumps(resume_data))
-        
-        # Step 5: Auto-initialize new session if requested
+        # Step 5: Initialize new session if requested
         if auto_initialize:
-            new_session_result = await initialize_claude_session(
-                project=project,
-                context={
-                    "resumed_from": session_id,
-                    "continuation_mode": True,
-                    "previous_session_summary": resume_data["session_analysis"]
-                }
-            )
+            new_session_result = await initialize_claude_session(project=project)
             resume_data["new_session"] = new_session_result
-            
-            # Log the successful resume
-            await activity_logger.log_action(
-                action_type="session_resume",
-                description=f"Successfully resumed from session {session_id}",
-                details={
-                    "previous_session_id": session_id,
-                    "new_session_id": new_session_result.get("session_id"),
-                    "actions_resumed": len(actions),
-                    "files_context": len(files_modified),
-                    "success_rate": success_rate
-                }
-            )
         
         return resume_data
         
@@ -1406,20 +1591,29 @@ async def endsession(
     Returns:
         Session termination confirmation with data persistence status
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("endsession", {
+        "session_id": session_id, "reason": reason, "completion_timeout": completion_timeout,
+        "prepare_resume": prepare_resume, "export_context": export_context
+    })
+    
     try:
         logger.info(f"🏁 Ending session gracefully: {session_id or 'auto-detect'}")
         
         # Step 1: Auto-detect session ID if not provided
         if not session_id:
-            latest_session = await postgres.get_latest_active_session("finderskeepers-v2")
-            if latest_session:
-                session_id = latest_session["session_id"]
+            active_sessions = await postgres.get_active_sessions(project="finderskeepers-v2", limit=1)
+            if active_sessions:
+                session_id = active_sessions[0]["session_id"]
             else:
                 return {
                     "error": "No active session found to end",
                     "status": "no_active_session",
                     "timestamp": datetime.utcnow().isoformat()
                 }
+                
+        # Set the session_id in the activity logger for proper shutdown
+        activity_logger.set_session_id(session_id)
         
         # Step 2: Get full session context before termination
         session_context = await get_full_conversation_context(
@@ -1428,6 +1622,16 @@ async def endsession(
             include_files=True,
             conversation_limit=100
         )
+        
+        # Ensure session_context has all expected keys to prevent NoneType errors
+        if session_context is None:
+            session_context = {}
+            
+        # Provide default values for missing keys
+        session_context.setdefault("actions", [])
+        session_context.setdefault("conversation_history", [])
+        session_context.setdefault("file_changes", [])
+        session_context.setdefault("summary", {})
         
         # Step 3: Wait for any pending data ingestion to complete
         logger.info(f"⏳ Waiting up to {completion_timeout}s for data ingestion to complete...")
@@ -1462,10 +1666,39 @@ async def endsession(
                 json.dumps(resume_info)
             )
         
-        # Step 6: Mark session as ended in database
-        end_result = await postgres.end_session(session_id, reason)
+        # Step 6: Notify n8n about session end first
+        session_end_data = {
+            "session_id": session_id,
+            "status": "ended",
+            "end_time": datetime.utcnow().isoformat(),
+            "reason": reason
+        }
         
-        # Step 7: Log the session termination
+        # Call n8n Session End webhook
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{activity_logger.n8n_webhook_url}/webhook/session-end",
+                    json=session_end_data,
+                    timeout=10.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Session end notification sent to n8n for session {session_id}")
+                else:
+                    logger.warning(f"n8n session-end webhook failed: {response.status_code}")
+        except Exception as webhook_error:
+            logger.warning(f"n8n session-end webhook error: {webhook_error}")
+        
+        # Step 7: Mark session as ended in database (using existing activity logger)
+        end_result = await activity_logger.shutdown(reason)
+        
+        # Ensure end_result is not None to prevent NoneType errors
+        if end_result is None:
+            end_result = {"success": False, "error": "activity_logger.shutdown returned None"}
+        
+        # Step 8: Log the session termination
         await activity_logger.log_action(
             action_type="session_end",
             description=f"Session {session_id} ended gracefully",
@@ -1481,8 +1714,12 @@ async def endsession(
             }
         )
         
-        # Step 8: Final cleanup and verification
+        # Step 9: Final cleanup and verification
         cleanup_result = await perform_session_cleanup(session_id)
+        
+        # Ensure cleanup_result is not None to prevent NoneType errors
+        if cleanup_result is None:
+            cleanup_result = {"success": False, "error": "perform_session_cleanup returned None"}
         
         return {
             "status": "session_ended",
@@ -1516,6 +1753,34 @@ async def endsession(
         }
 
 @mcp.tool()
+async def cleanup_zombie_sessions_tool(
+    max_age_hours: int = 6,
+    dry_run: bool = True
+) -> Dict[str, Any]:
+    """
+    Clean up zombie sessions that have been active for too long
+    
+    Args:
+        max_age_hours: Maximum age in hours before a session is considered zombie (default: 6)
+        dry_run: If True, only identify zombie sessions without ending them (default: True)
+        
+    Returns:
+        Dictionary with cleanup results
+    """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("cleanup_zombie_sessions_tool", {
+        "max_age_hours": max_age_hours, "dry_run": dry_run
+    })
+    
+    logger.info(f"🧹 {'Checking for' if dry_run else 'Cleaning up'} zombie sessions older than {max_age_hours} hours")
+    result = await cleanup_zombie_sessions(max_age_hours, dry_run)
+    
+    # Log the result through universal middleware
+    await _log_tool_call("cleanup_zombie_sessions_tool", {}, result)
+    
+    return result
+
+@mcp.tool()
 async def get_project_overview(
     project: str,
     include_recent_activity: bool = True,
@@ -1532,6 +1797,11 @@ async def get_project_overview(
     Returns:
         Complete project overview with statistics and recent activity
     """
+    # Universal conversation logging for this tool call
+    await _log_tool_call("get_project_overview", {
+        "project": project, "include_recent_activity": include_recent_activity, "activity_days": activity_days
+    })
+    
     try:
         logger.info(f"📊 Getting project overview: {project}")
         
@@ -1553,7 +1823,7 @@ async def get_project_overview(
         # Get knowledge graph entities for this project
         project_entities = await neo4j.get_project_entities(project, limit=15)
         
-        return {
+        result = {
             "project": project,
             "statistics": project_stats,
             "recent_documents": recent_docs,
@@ -1568,6 +1838,11 @@ async def get_project_overview(
             "analysis_period": f"Last {activity_days} days",
             "timestamp": datetime.utcnow().isoformat()
         }
+        
+        # Log the successful result through universal middleware
+        await _log_tool_call("get_project_overview", {}, result)
+        
+        return result
         
     except Exception as e:
         logger.error(f"Project overview failed: {e}")
@@ -1822,6 +2097,10 @@ async def startup():
         # Initialize conversation monitoring for exit command detection
         global conversation_monitor
         conversation_monitor = await setup_conversation_monitoring(activity_logger)
+        
+        # Initialize universal conversation logging middleware
+        middleware = initialize_conversation_middleware(activity_logger)
+        logger.info("🌐 Universal conversation logging middleware initialized")
         
         # Start parent process monitoring
         global parent_process_monitor_task

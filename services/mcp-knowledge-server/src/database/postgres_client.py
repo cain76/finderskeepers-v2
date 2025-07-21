@@ -113,7 +113,11 @@ class PostgresClient:
             Session details dictionary
         """
         if not self.pool:
-            return {}
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return {}
             
         try:
             async with self.pool.acquire() as conn:
@@ -153,7 +157,11 @@ class PostgresClient:
             List of action dictionaries
         """
         if not self.pool:
-            return []
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
             
         try:
             async with self.pool.acquire() as conn:
@@ -204,7 +212,11 @@ class PostgresClient:
             List of recent sessions
         """
         if not self.pool:
-            return []
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
             
         try:
             async with self.pool.acquire() as conn:
@@ -251,6 +263,400 @@ class PostgresClient:
             logger.error(f"Failed to get recent sessions: {e}")
             return []
     
+    async def get_recent_completed_sessions(
+        self,
+        agent_type: Optional[str] = None,
+        project: Optional[str] = None,
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent COMPLETED agent sessions (sessions with end_time)
+        
+        Args:
+            agent_type: Filter by agent type
+            project: Filter by project
+            limit: Maximum number of sessions
+            
+        Returns:
+            List of recent completed sessions
+        """
+        if not self.pool:
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
+            
+        try:
+            async with self.pool.acquire() as conn:
+                # Build dynamic query for completed sessions (end_time IS NOT NULL)
+                conditions = ["end_time IS NOT NULL"]
+                params = []
+                param_idx = 1
+                
+                if agent_type:
+                    conditions.append(f"agent_type = ${param_idx}")
+                    params.append(agent_type)
+                    param_idx += 1
+                    
+                if project:
+                    conditions.append(f"project = ${param_idx}")
+                    params.append(project)
+                    param_idx += 1
+                
+                where_clause = "WHERE " + " AND ".join(conditions)
+                
+                query = f"""
+                    SELECT 
+                        session_id, agent_type, user_id, project,
+                        start_time, end_time, context, created_at
+                    FROM agent_sessions 
+                    {where_clause}
+                    ORDER BY end_time DESC
+                    LIMIT ${param_idx}
+                """
+                
+                params.append(limit)
+                rows = await conn.fetch(query, *params)
+                
+                results = []
+                for row in rows:
+                    result = dict(row)
+                    if result.get("context"):
+                        result["context"] = json.loads(result["context"]) if isinstance(result["context"], str) else result["context"]
+                    results.append(result)
+                    
+                return results
+                
+        except Exception as e:
+            logger.error(f"Failed to get recent completed sessions: {e}")
+            return []
+    
+    async def get_active_sessions(
+        self,
+        agent_type: Optional[str] = None,
+        project: Optional[str] = None,
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Get currently active agent sessions (sessions without end_time)
+        
+        Args:
+            agent_type: Filter by agent type
+            project: Filter by project
+            limit: Maximum number of sessions
+            
+        Returns:
+            List of active sessions
+        """
+        if not self.pool:
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
+            
+        try:
+            async with self.pool.acquire() as conn:
+                # Build dynamic query for active sessions (end_time IS NULL)
+                conditions = ["end_time IS NULL"]
+                params = []
+                param_idx = 1
+                
+                if agent_type:
+                    conditions.append(f"agent_type = ${param_idx}")
+                    params.append(agent_type)
+                    param_idx += 1
+                    
+                if project:
+                    conditions.append(f"project = ${param_idx}")
+                    params.append(project)
+                    param_idx += 1
+                
+                where_clause = "WHERE " + " AND ".join(conditions)
+                
+                query = f"""
+                    SELECT 
+                        session_id, agent_type, user_id, project,
+                        start_time, end_time, context, created_at
+                    FROM agent_sessions 
+                    {where_clause}
+                    ORDER BY start_time DESC
+                    LIMIT ${param_idx}
+                """
+                
+                params.append(limit)
+                
+                rows = await conn.fetch(query, *params)
+                
+                sessions = []
+                for row in rows:
+                    session_data = dict(row)
+                    
+                    # Convert datetime to string for JSON serialization
+                    for field in ['start_time', 'end_time', 'created_at']:
+                        if session_data.get(field):
+                            session_data[field] = session_data[field].isoformat()
+                    
+                    sessions.append(session_data)
+                
+                return sessions
+                
+        except Exception as e:
+            logger.error(f"Failed to get active sessions: {e}")
+            return []
+    
+    async def end_session(self, session_id: str, reason: str = "manual_end") -> Dict[str, Any]:
+        """
+        End a session by setting its end_time
+        
+        Args:
+            session_id: Session ID to end
+            reason: Reason for ending the session
+            
+        Returns:
+            Dictionary with success status and session info
+        """
+        if not self.pool:
+            return {"success": False, "error": "Database not connected"}
+            
+        try:
+            async with self.pool.acquire() as conn:
+                # Update session with end_time
+                query = """
+                    UPDATE agent_sessions 
+                    SET end_time = NOW(), 
+                        context = context || $2::jsonb
+                    WHERE session_id = $1 AND end_time IS NULL
+                    RETURNING session_id, start_time, end_time, project, agent_type
+                """
+                
+                result = await conn.fetchrow(query, session_id, json.dumps({"end_reason": reason}))
+                
+                if result:
+                    logger.info(f"✅ Session {session_id} ended successfully")
+                    return {
+                        "success": True,
+                        "session_id": session_id,
+                        "end_reason": reason,
+                        "session_info": dict(result)
+                    }
+                else:
+                    logger.warning(f"⚠️ Session {session_id} not found or already ended")
+                    return {
+                        "success": False,
+                        "error": f"Session {session_id} not found or already ended"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Failed to end session {session_id}: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def create_action(
+        self,
+        action_id: str,
+        session_id: str,
+        action_type: str,
+        description: str,
+        details: Optional[Dict[str, Any]] = None,
+        files_affected: Optional[List[str]] = None,
+        success: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Create a new agent action in the database
+        
+        Args:
+            action_id: Unique action identifier
+            session_id: Parent session ID
+            action_type: Type of action (file_edit, command, etc.)
+            description: Human-readable description
+            details: Action-specific details
+            files_affected: List of files modified
+            success: Whether action completed successfully
+            
+        Returns:
+            Created action data
+        """
+        if not self.pool:
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return {"success": False, "error": "Database not connected"}
+        
+        try:
+            async with self.pool.acquire() as conn:
+                result = await conn.fetchrow("""
+                    INSERT INTO agent_actions 
+                    (action_id, session_id, action_type, description, details, files_affected, success)
+                    VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+                    RETURNING *
+                """, action_id, session_id, action_type, description, 
+                    json.dumps(details or {}), files_affected or [], success)
+                
+                if result:
+                    return {
+                        "success": True,
+                        "action_id": result["action_id"],
+                        "session_id": result["session_id"],
+                        "timestamp": result["timestamp"].isoformat(),
+                        "action_type": result["action_type"],
+                        "description": result["description"],
+                        "details": result["details"],
+                        "files_affected": result["files_affected"],
+                        "success": result["success"]
+                    }
+                else:
+                    return {"success": False, "error": "Failed to create action"}
+                    
+        except Exception as e:
+            logger.error(f"Failed to create action {action_id}: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def create_conversation_message(
+        self,
+        message_id: str,
+        session_id: str,
+        message_type: str,
+        content: str,
+        context: Optional[Dict[str, Any]] = None,
+        reasoning: Optional[str] = None,
+        tools_used: Optional[List[str]] = None,
+        files_referenced: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new conversation message in the database
+        
+        Args:
+            message_id: Unique message identifier
+            session_id: Parent session ID
+            message_type: Type of message (user_message, ai_response, etc.)
+            content: Full message content
+            context: Additional context
+            reasoning: AI reasoning process
+            tools_used: List of tools used
+            files_referenced: List of files referenced
+            
+        Returns:
+            Created message data
+        """
+        if not self.pool:
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return {"success": False, "error": "Database not connected"}
+        
+        try:
+            async with self.pool.acquire() as conn:
+                # Auto-generate sequence number
+                sequence_number = await conn.fetchval("""
+                    SELECT COALESCE(MAX(sequence_number), 0) + 1
+                    FROM conversation_messages
+                    WHERE session_id = $1
+                """, session_id)
+                
+                result = await conn.fetchrow("""
+                    INSERT INTO conversation_messages 
+                    (message_id, session_id, message_type, content, context, reasoning, 
+                     tools_used, files_referenced, sequence_number)
+                    VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)
+                    RETURNING *
+                """, message_id, session_id, message_type, content, 
+                    json.dumps(context or {}), reasoning, tools_used or [], 
+                    files_referenced or [], sequence_number)
+                
+                if result:
+                    return {
+                        "success": True,
+                        "message_id": result["message_id"],
+                        "session_id": result["session_id"],
+                        "message_type": result["message_type"],
+                        "content": result["content"],
+                        "context": result["context"],
+                        "reasoning": result["reasoning"],
+                        "tools_used": result["tools_used"],
+                        "files_referenced": result["files_referenced"],
+                        "sequence_number": result["sequence_number"],
+                        "timestamp": result["timestamp"].isoformat()
+                    }
+                else:
+                    return {"success": False, "error": "Failed to create message"}
+                    
+        except Exception as e:
+            logger.error(f"Failed to create conversation message {message_id}: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def get_conversation_messages(
+        self,
+        session_id: str,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversation messages for a session
+        
+        Args:
+            session_id: Session ID to get messages for
+            limit: Maximum number of messages
+            
+        Returns:
+            List of conversation messages
+        """
+        if not self.pool:
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
+        
+        try:
+            async with self.pool.acquire() as conn:
+                messages = await conn.fetch("""
+                    SELECT *
+                    FROM conversation_messages
+                    WHERE session_id = $1
+                    ORDER BY sequence_number DESC
+                    LIMIT $2
+                """, session_id, limit)
+                
+                return [
+                    {
+                        "message_id": row["message_id"],
+                        "session_id": row["session_id"],
+                        "message_type": row["message_type"],
+                        "content": row["content"],
+                        "context": row["context"],
+                        "reasoning": row["reasoning"],
+                        "tools_used": row["tools_used"],
+                        "files_referenced": row["files_referenced"],
+                        "sequence_number": row["sequence_number"],
+                        "timestamp": row["timestamp"].isoformat()
+                    }
+                    for row in messages
+                ]
+                
+        except Exception as e:
+            logger.error(f"Failed to get conversation messages for session {session_id}: {e}")
+            return []
+    
+    async def get_conversation_message_count(self, session_id: str) -> int:
+        """Get count of conversation messages for a session"""
+        if not self.pool:
+            return 0
+        
+        try:
+            async with self.pool.acquire() as conn:
+                count = await conn.fetchval("""
+                    SELECT COUNT(*) FROM conversation_messages WHERE session_id = $1
+                """, session_id)
+                return count or 0
+        except Exception as e:
+            logger.error(f"Failed to get conversation message count: {e}")
+            return 0
+    
     async def get_recent_actions(
         self,
         agent_type: Optional[str] = None,
@@ -269,7 +675,11 @@ class PostgresClient:
             List of recent actions
         """
         if not self.pool:
-            return []
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
             
         try:
             async with self.pool.acquire() as conn:
@@ -448,7 +858,11 @@ class PostgresClient:
             List of recent documents
         """
         if not self.pool:
-            return []
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
             
         try:
             async with self.pool.acquire() as conn:
@@ -495,7 +909,11 @@ class PostgresClient:
             List of recent activities
         """
         if not self.pool:
-            return []
+            logger.warning("PostgreSQL pool not available, attempting to reconnect...")
+            await self.connect()
+            if not self.pool:
+                logger.error("Failed to establish PostgreSQL connection")
+                return []
             
         try:
             since_date = datetime.utcnow() - timedelta(days=days)

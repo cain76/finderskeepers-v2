@@ -20,7 +20,7 @@ from uuid import uuid4
 from app.api.v1.ingestion import ingestion_router
 from app.api.v1.diary import diary_router
 from app.database.connection import db_manager
-from app.database.queries import StatsQueries, SessionQueries, DocumentQueries
+from app.database.queries import StatsQueries, SessionQueries, DocumentQueries, ConversationQueries
 from app.api.chat_endpoints import ChatRequest, ChatResponse, process_chat_message
 
 # Configure logging

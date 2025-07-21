@@ -222,7 +222,7 @@ class QdrantClient:
             # Search for document chunks
             search_results = await self.client.search(
                 collection_name=self.collection_name,
-                query_vector=[0.0] * 1536,  # Dummy vector for filter-only search
+                query_vector=[0.0] * 1024,  # Dummy vector for filter-only search
                 query_filter=Filter(
                     must=[
                         FieldCondition(

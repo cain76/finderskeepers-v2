@@ -415,6 +415,67 @@ class RedisClient:
             logger.error(f"Failed to invalidate cache: {e}")
             return 0
     
+    async def get(self, key: str) -> Optional[str]:
+        """
+        Get value by key
+        
+        Args:
+            key: Redis key
+            
+        Returns:
+            Value or None if not found
+        """
+        if not self.client:
+            return None
+            
+        try:
+            return await self.client.get(key)
+        except Exception as e:
+            logger.error(f"Failed to get key '{key}': {e}")
+            return None
+    
+    async def setex(self, key: str, ttl: int, value: str) -> bool:
+        """
+        Set key with expiration time
+        
+        Args:
+            key: Redis key
+            ttl: Time to live in seconds
+            value: Value to store
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.client:
+            return False
+            
+        try:
+            await self.client.setex(key, ttl, value)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to setex key '{key}': {e}")
+            return False
+    
+    async def delete(self, key: str) -> bool:
+        """
+        Delete a key
+        
+        Args:
+            key: Redis key to delete
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.client:
+            return False
+            
+        try:
+            await self.client.delete(key)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete key '{key}': {e}")
+            return False
+
     async def health_check(self) -> bool:
         """
         Check if Redis is healthy and responding

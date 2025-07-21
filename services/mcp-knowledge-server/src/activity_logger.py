@@ -29,89 +29,28 @@ class ActivityLogger:
         self._cleanup_task = None
         
     async def initialize(self):
-        """Create a new session for this MCP server instance using n8n webhook"""
+        """Initialize the activity logger without creating a session"""
         try:
-            # Only create session if explicitly requested
-            if os.getenv("MCP_AUTO_SESSION", "false").lower() != "true":
-                logger.info("🔒 Auto-session creation disabled (set MCP_AUTO_SESSION=true to enable)")
-                self.initialized = False
-                return
-            
-            # Check if services are available before creating session
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    response = await client.get(f"{self.fastapi_base_url}/health")
-                    if response.status_code != 200:
-                        logger.warning("⚠️ FastAPI not available, skipping session creation")
-                        self.initialized = False
-                        return
-            except Exception as e:
-                logger.info(f"⚠️ FastAPI not available ({e}), skipping session creation")
-                self.initialized = False
-                return
-            
-            # Create session using n8n Agent Session Logger webhook
-            session_data = {
-                "agent_type": self.agent_type,
-                "user_id": "local_user",
-                "project": "finderskeepers-v2",
-                "context": {
-                    "server": "mcp_knowledge_server",
-                    "version": "2.0.0",
-                    "started_at": datetime.utcnow().isoformat(),
-                    "connection_type": "automatic_startup",
-                    "capabilities": [
-                        "search_documents",
-                        "query_knowledge_graph", 
-                        "get_session_context",
-                        "analyze_document_similarity",
-                        "get_project_overview"
-                    ],
-                    "auto_logging": True,
-                    "purpose": "MCP server session for AI agent knowledge access"
-                }
-            }
-            
-            # Call n8n Agent Session Logger webhook using fk2 naming convention
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    f"{self.n8n_webhook_url}/webhook/agent-logger",
-                    json=session_data,
-                    timeout=5.0
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    # n8n webhook returns array with session data
-                    if isinstance(result, list) and len(result) > 0:
-                        session_response = result[0]
-                        if "session_id" in session_response:
-                            self.session_id = session_response["session_id"]
+            # No automatic session creation - sessions are only created explicitly via MCP tools
+            logger.info("🔒 Activity logger initialized without auto-session creation")
+            self.initialized = True
+            return
                     
-                    if not self.session_id:
-                        # Generate fallback session_id
-                        self.session_id = f"mcp_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-                    
-                    self.initialized = True
-                    self.session_start_time = datetime.utcnow()
-                    logger.info(f"✅ MCP session created via n8n webhook: {self.session_id}")
-                    
-                    # Start cleanup timer
-                    self._cleanup_task = asyncio.create_task(self._session_timeout_cleanup())
-                    
-                else:
-                    logger.warning(f"⚠️ Failed to create session via n8n webhook: {response.status_code}")
-                    self.initialized = False
-                    
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
-            logger.warning(f"⚠️ n8n webhook timeout/connection error during initialization: {e}")
-            # Continue without logging rather than fail the server
-            self.initialized = False
         except Exception as e:
-            logger.error(f"❌ MCP session initialization failed: {e}")
+            logger.error(f"❌ Activity logger initialization failed: {e}")
             # Continue without logging rather than fail the server
             self.initialized = False
     
+    def set_session_id(self, session_id: str):
+        """Set the session ID for logging (called when session is created via MCP tools)"""
+        self.session_id = session_id
+        self.session_start_time = datetime.utcnow()
+        logger.info(f"📝 Activity logger now tracking session: {session_id}")
+        
+        # Start cleanup timer
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+        self._cleanup_task = asyncio.create_task(self._session_timeout_cleanup())
     
     async def log_action(
         self,
@@ -124,8 +63,12 @@ class ActivityLogger:
     ):
         """Log an action to the n8n Agent Action Tracker webhook"""
         
-        if not self.initialized or not self.session_id:
+        if not self.initialized:
             return  # Skip logging if not initialized
+        
+        # Skip logging if no session is active (sessions are created explicitly via MCP tools)
+        if not self.session_id:
+            return
             
         try:
             action_data = {
@@ -221,8 +164,9 @@ class ActivityLogger:
                 webhook_success = await self._try_webhook_session_end(reason)
                 
                 # If webhook fails, use direct database fallback
+                database_success = False
                 if not webhook_success:
-                    await self._direct_database_session_end(reason)
+                    database_success = await self._direct_database_session_end(reason)
                 
                 # Cancel cleanup task
                 if self._cleanup_task and not self._cleanup_task.done():
@@ -232,11 +176,32 @@ class ActivityLogger:
                 self.initialized = False
                 self.session_id = None
                 
+                return {
+                    "success": True,
+                    "webhook_success": webhook_success,
+                    "database_success": database_success or webhook_success,
+                    "reason": reason,
+                    "message": "Session ended gracefully"
+                }
+                
             except Exception as e:
                 logger.error(f"Error during activity logger shutdown: {e}")
                 # Don't let shutdown errors prevent the main shutdown
                 self.initialized = False
                 self.session_id = None
+                
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "reason": reason,
+                    "message": "Session shutdown encountered errors"
+                }
+        else:
+            return {
+                "success": True,
+                "message": "No active session to shutdown",
+                "reason": reason
+            }
 
     async def _try_webhook_session_end(self, reason: str) -> bool:
         """Try to end session via n8n webhook"""
@@ -266,29 +231,35 @@ class ActivityLogger:
             logger.warning(f"Webhook session end error: {e}")
             return False
 
-    async def _direct_database_session_end(self, reason: str):
+    async def _direct_database_session_end(self, reason: str) -> bool:
         """Directly end session in database as fallback"""
         try:
-            logger.info(f"Using database fallback to end session {self.session_id}")
+            logger.info(f"Using direct database call to end session {self.session_id}")
             
-            # Direct FastAPI call as fallback
-            fastapi_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
-            async with httpx.AsyncClient() as client:
-                response = await client.put(
-                    f"{fastapi_url}/api/diary/sessions/{self.session_id}/end",
-                    json={"reason": reason, "fallback": True},
-                    timeout=10.0
-                )
-                
-                if response.status_code == 200:
-                    logger.info(f"✅ Session {self.session_id} ended via database fallback")
-                else:
-                    logger.error(f"Database fallback failed: {response.status_code}")
+            # Import and use the existing postgres client from knowledge_server
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            
+            # Import the postgres client - using the same class as knowledge_server
+            from database.postgres_client import PostgresClient
+            
+            # Use direct database call instead of HTTP request
+            postgres = PostgresClient()
+            result = await postgres.end_session(self.session_id, reason)
+            
+            if result.get("success", False):
+                logger.info(f"✅ Session {self.session_id} ended via direct database call")
+                return True
+            else:
+                logger.error(f"Direct database call failed: {result.get('error', 'Unknown error')}")
+                return False
                     
         except Exception as e:
-            logger.error(f"Database fallback error: {e}")
+            logger.error(f"Direct database call error: {e}")
             # Log this as a critical issue for manual intervention
             logger.critical(f"MANUAL_INTERVENTION_NEEDED: Session {self.session_id} not properly ended")
+            return False
 
     async def _session_timeout_cleanup(self):
         """Auto-cleanup session after timeout to prevent zombies"""

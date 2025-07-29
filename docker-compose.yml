@@ -1,30 +1,71 @@
-# FindersKeepers v2 - Personal AI Agent Knowledge Hub
-# Free, Local, Docker-Based Architecture (July 2025)
-
-# version: '3.8'  # Deprecated in newer Docker Compose
+# FindersKeepers v2 - Personal AI Agent Knowledge Hub for bitcain
+# Updated Docker Compose with latest n8n and security improvements
 
 services:
   # ========================================
-  # WORKFLOW AUTOMATION
+  # WORKFLOW AUTOMATION - UPDATED n8n
   # ========================================
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:latest  # Latest stable version with PostgreSQL backend
     container_name: fk2_n8n
     restart: unless-stopped
     ports:
       - "5678:5678"
     environment:
+      # Basic Authentication
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=finderskeepers2025
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-jeremy.cn.davis@gmail.com}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-Toolman7424!}
+      
+      # Network Configuration
       - WEBHOOK_URL=http://localhost:5678/
+      - N8N_PROTOCOL=http
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      
+      # Security & Performance
       - GENERIC_TIMEZONE=America/New_York
       - N8N_JWT_SECRET=${N8N_JWT_SECRET:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MzY1MDU0ZS05YjY0LTRiY2ItOTFhZS0yMWRjNTc3NzRjMjUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzQyNjU4ODc0fQ.P4R2cmeV9uwsUH3Dohf8kvhEXMIoAu_3MwElSvvyiH8}
-      # GPU environment variables
+      
+      # Fix deprecation warnings
+      - N8N_RUNNERS_ENABLED=true  # Enable task runners (required for future versions)
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true  # Enforce secure file permissions
+      
+      # Database Configuration (PostgreSQL)
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=finderskeepers_v2
+      - DB_POSTGRESDB_USER=finderskeepers
+      - DB_POSTGRESDB_PASSWORD=fk2025secure
+      
+      # Enhanced Features
+      - N8N_TEMPLATES_ENABLED=true
+      - N8N_DIAGNOSTICS_ENABLED=false  # Disable telemetry for privacy
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=true
+      - N8N_COMMUNITY_PACKAGES_ENABLED=true
+      
+      # GPU environment variables for bitcain's RTX 2080 Ti
       - CUDA_VISIBLE_DEVICES=0
       - NVIDIA_VISIBLE_DEVICES=0
+      
+      # Workflow execution settings - REGULAR MODE FOR SINGLE INSTANCE
+      - EXECUTIONS_MODE=regular
+      # Queue settings disabled for regular mode
+      # - QUEUE_BULL_REDIS_HOST=redis
+      # - QUEUE_BULL_REDIS_PORT=6379
+      # - OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=true
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_RUNNERS_MODE=internal
+      
+      # Logging
+      - N8N_LOG_LEVEL=debug
+      - N8N_LOG_OUTPUT=console
+      
     volumes:
       - n8n_data:/home/node/.n8n
+      # Custom node modules if needed
+      - ./n8n/custom-nodes:/home/node/.n8n/custom
     deploy:
       resources:
         reservations:
@@ -36,17 +77,19 @@ services:
       - postgres
       - redis
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - n8n
 
   # ========================================
-  # API BACKEND
+  # API BACKEND - Enhanced for bitcain
   # ========================================
   fastapi:
     build:
       context: ./services/diary-api
       dockerfile: Dockerfile
       args:
-        DOCKER_USERNAME: ${DOCKER_USERNAME:-}
+        DOCKER_USERNAME: ${DOCKER_USERNAME:-bitcainnet}
         DOCKER_TOKEN: ${DOCKER_TOKEN:-}
       x-bake:
         platforms:
@@ -60,24 +103,32 @@ services:
       - BUILDX_BUILDER=${BUILDX_BUILDER:-}
       - PYTHONPATH=/app
       - LOG_LEVEL=info
-      # Database connections
+      
+      # Database connections for bitcain
       - POSTGRES_URL=postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=fk2025neo4j
       - REDIS_URL=redis://redis:6379
       - QDRANT_URL=http://qdrant:6333
-      # Local LLM Configuration
+      
+      # Local LLM Configuration optimized for RTX 2080 Ti
       - OLLAMA_URL=http://ollama:11434
       - USE_LOCAL_LLM=true
       - EMBEDDING_MODEL=mxbai-embed-large
       - CHAT_MODEL=llama3.2:3b
+      
       # AI API Keys (fallback if local unavailable)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      
+      # Enhanced n8n integration
+      - N8N_WEBHOOK_URL=http://n8n:5678
+      - N8N_API_URL=http://n8n:5678/api/v1
+      
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for container monitoring
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       resources:
         reservations:
@@ -91,11 +142,14 @@ services:
       - redis
       - qdrant
       - ollama
+      - n8n
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - fastapi
 
   # ========================================
-  # VECTOR DATABASES
+  # VECTOR DATABASES - Enhanced for bitcain
   # ========================================
   postgres:
     image: pgvector/pgvector:pg16
@@ -117,6 +171,9 @@ services:
                -c log_destination=stderr 
                -c log_statement=all 
                -c log_min_duration_statement=0
+               -c max_connections=200
+               -c shared_buffers=256MB
+               -c effective_cache_size=1GB
     deploy:
       resources:
         reservations:
@@ -125,7 +182,9 @@ services:
               count: 1
               capabilities: [gpu]
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - postgres
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -157,10 +216,12 @@ services:
               count: 1
               capabilities: [gpu]
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - qdrant
 
   # ========================================
-  # KNOWLEDGE GRAPH
+  # KNOWLEDGE GRAPH - Enhanced for bitcain
   # ========================================
   neo4j:
     image: neo4j:5.18-community
@@ -190,7 +251,9 @@ services:
               count: 1
               capabilities: [gpu]
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - neo4j
 
   # ========================================
   # CACHING & SESSION MANAGEMENT
@@ -206,10 +269,12 @@ services:
       - redis_data:/data
       - ./config/redis/redis.conf:/etc/redis/redis.conf:ro
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - redis
 
   # ========================================
-  # LOCAL LLM INFERENCE (GPU-ACCELERATED)
+  # LOCAL LLM INFERENCE (GPU-ACCELERATED for bitcain RTX 2080 Ti)
   # ========================================
   ollama:
     image: ollama/ollama:latest
@@ -222,6 +287,10 @@ services:
       - CUDA_VISIBLE_DEVICES=0
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_ORIGINS=*
+      # Optimized for RTX 2080 Ti (11GB VRAM)
+      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_QUEUE=512
     volumes:
       - ollama_data:/root/.ollama
     deploy:
@@ -232,10 +301,12 @@ services:
               count: 1
               capabilities: [gpu]
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - ollama
 
   # ========================================
-  # REACT FRONTEND (Vite Development Server)
+  # REACT FRONTEND - Enhanced for bitcain
   # ========================================
   frontend:
     build:
@@ -253,20 +324,31 @@ services:
       - VITE_NEO4J_USER=neo4j
       - VITE_NEO4J_PASSWORD=fk2025neo4j
       - VITE_QDRANT_URL=http://localhost:6333
-      - CHOKIDAR_USEPOLLING=true  # For hot reload in Docker
+      - VITE_N8N_URL=http://localhost:5678
+      - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app
-      - /app/node_modules  # Anonymous volume for node_modules
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for file operations
+      - /app/node_modules
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       - fastapi
       - neo4j
+      - n8n
     networks:
-      - finderskeepers_network
+      shared-network:
+        aliases:
+          - frontend
 
   # ========================================
-  # WEB SCRAPING SERVICE (Beautiful Soup)
+  # WEB SCRAPING SERVICE
   # ========================================
   webscraper:
     build:
@@ -281,34 +363,14 @@ services:
     depends_on:
       - fastapi
     networks:
-      - finderskeepers_network
-
-  # ========================================
-  # CHAT INTERFACE (Future Enhancement)
-  # ========================================
-  # chat-ui:
-  #   image: python:3.12-slim
-  #   container_name: fk2_chat_ui
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8501:8501"
-  #   environment:
-  #     - STREAMLIT_SERVER_PORT=8501
-  #     - STREAMLIT_SERVER_ADDRESS=0.0.0.0
-  #   volumes:
-  #     - ./services/chat-interface:/app
-  #   working_dir: /app
-  #   command: >
-  #     bash -c "pip install streamlit && streamlit run app.py"
-  #   depends_on:
-  #     - fastapi
-  #   networks:
-  #     - finderskeepers_network
+      shared-network:
+        aliases:
+          - webscraper
 
 networks:
-  finderskeepers_network:
-    driver: bridge
-    name: finderskeepers_v2_network
+  shared-network:
+    name: shared-network
+    external: true
 
 volumes:
   # Named volumes for data persistence
@@ -321,24 +383,27 @@ volumes:
   ollama_data:
 
 # ========================================
-# USAGE INSTRUCTIONS
+# bitcain USAGE INSTRUCTIONS
 # ========================================
 # 1. Start all services:
-#    docker-compose up -d
+#    docker compose up -d
 #
 # 2. Access points:
-#    - n8n Workflows: http://localhost:5678 (admin/finderskeepers2025)
+#    - n8n Workflows: http://localhost:5678 (jeremy.cn.davis@gmail.com/Toolman7424!)
 #    - FastAPI Docs: http://localhost:8000/docs
 #    - Neo4j Browser: http://localhost:7474 (neo4j/fk2025neo4j)
 #    - Qdrant API: http://localhost:6333
+#    - Frontend UI: http://localhost:3000
 #
-# 3. Initial setup:
-#    - Create database schemas
-#    - Import existing FindersKeepers data
-#    - Configure n8n workflows for agent logging
+# 3. bitcain-specific optimizations:
+#    - RTX 2080 Ti GPU acceleration across all services
+#    - Enhanced n8n with task runners enabled
+#    - PostgreSQL backend for n8n data persistence
+#    - Improved security and performance settings
 #
 # 4. Environment variables needed:
-#    - OPENAI_API_KEY
-#    - GOOGLE_API_KEY  
-#    - ANTHROPIC_API_KEY
-#    - N8N_JWT_SECRET (provided above)
+#    - OPENAI_API_KEY (optional)
+#    - GOOGLE_API_KEY (optional)
+#    - ANTHROPIC_API_KEY (optional)
+#    - DOCKER_USERNAME=bitcainnet
+#    - DOCKER_TOKEN (your Docker hub token)

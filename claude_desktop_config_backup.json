@@ -1,0 +1,52 @@
+{
+  "mcpServers": {
+    "fk2-mcp": {
+      "command": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-session-server/.venv/bin/python",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-session-server/src/fk2_mcp_server.py"
+      ],
+      "env": {
+        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2",
+        "N8N_WEBHOOK_URL": "http://localhost:5678",
+        "FASTAPI_URL": "http://localhost:8000",
+        "QDRANT_URL": "http://localhost:6333",
+        "NEO4J_URL": "bolt://localhost:7687",
+        "LOG_LEVEL": "INFO",
+        "FINDERSKEEPERS_PROJECT": "finderskeepers-v2",
+        "FINDERSKEEPERS_USER": "bitcain",
+        "PYTHONPATH": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-session-server"
+      }
+    },
+    "n8n-mcp": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "-e", "MCP_MODE=stdio",
+        "-e", "LOG_LEVEL=error", 
+        "-e", "DISABLE_CONSOLE_OUTPUT=true",
+        "-e", "N8N_API_URL=http://fk2_n8n:5678",
+        "-e", "N8N_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxZDVhMTkyNS01NDhlLTRiNDYtYWJhMi04MjAwZjgzZGRkNDkiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUzNDIyMjk2fQ.wM-e2IJ8cL12bWXIXbfDGMn6vA9IUKgPSbtf_pb7RpI",
+        "fk2_n8n_mcp",
+        "node",
+        "dist/mcp/index.js"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home",
+        "/media/cain/linux_storage"
+      ]
+    },
+    "desktop-commander": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wonderwhy-er/desktop-commander"
+      ]
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "mcpServers": {
+    "fk2-mcp": {
+      "type": "stdio",
+      "command": "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-session-server/venv/bin/python",
+      "args": [
+        "/media/cain/linux_storage/projects/finderskeepers-v2/services/mcp-session-server/src/fk2_mcp_server.py"
+      ],
+      "env": {
+        "POSTGRES_URL": "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2",
+        "N8N_WEBHOOK_URL": "http://localhost:5678",
+        "FASTAPI_URL": "http://localhost:8000",
+        "QDRANT_URL": "http://localhost:6333",
+        "NEO4J_URL": "bolt://localhost:7687"
+      }
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/home",
+        "/media/cain/linux_storage"
+      ],
+      "env": {}
+    },
+    "desktop-commander": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wonderwhy-er/desktop-commander"
+      ],
+      "env": {}
+    },
+    "brave-search": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "BSAomC2D07-YMgcFrMPAMQOpCMCI0CP"
+      }
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "env": {}
+    }
+  }
+}

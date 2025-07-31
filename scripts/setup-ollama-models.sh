@@ -44,14 +44,7 @@ download_model() {
 download_model "mxbai-embed-large" "Embedding model - 334M params, optimized for RTX 2080 Ti"
 
 # Download small chat model (fits comfortably in 11GB VRAM)
-download_model "llama3.2:3b" "Chat model - 3B params, fast inference"
-
-# Download code-specific model
-download_model "codestral:7b" "Code model - 7B params, specialized for programming"
-
-# Optional: Download a tiny model for testing
-echo "📥 Downloading qwen2.5:0.5b (testing model)..."
-docker exec -it fk2_ollama ollama pull qwen2.5:0.5b
+download_model "llama3:8b" "Chat model - 8B params, better performance"
 
 echo "🧪 Testing model functionality..."
 
@@ -71,7 +64,7 @@ fi
 # Test chat model
 echo "Testing chat generation..."
 response=$(docker exec fk2_ollama curl -s http://localhost:11434/api/generate -d '{
-  "model": "llama3.2:3b",
+  "model": "llama3:8b",
   "prompt": "Hello, this is a test.",
   "stream": false
 }')
@@ -92,7 +85,7 @@ docker exec fk2_ollama ollama list
 echo ""
 echo "💡 Model recommendations for RTX 2080 Ti (11GB VRAM):"
 echo "• Embedding: mxbai-embed-large (334M) - Always loaded"
-echo "• Chat: llama3.2:3b (3B) - Primary chat model"
+echo "• Chat: llama3:8b (8B) - Primary chat model"
 echo "• Code: codestral:7b (7B) - Code generation/analysis"
 echo "• Testing: qwen2.5:0.5b (0.5B) - Lightweight testing"
 echo ""

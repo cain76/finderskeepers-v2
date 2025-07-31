@@ -1,0 +1,381 @@
+{
+  "name": "FK2-MCP Agent Action Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "action-tracker",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-action-tracker",
+      "name": "FK2-MCP Action Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        160,
+        304
+      ],
+      "webhookId": "92c8f584-699f-4f0c-8b52-edf1667f9325",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced FK2-MCP action tracking for finderskeepers-v2\ntry {\n  const body = $input.first().json.body || $input.first().json;\n  \n  // Extract action data with validation\n  const sessionId = body.session_id || `fk2_sess_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;\n  const actionType = body.action_type || 'conversation_message';\n  const description = body.description || '';\n  const details = body.details || {};\n  const filesAffected = body.files_affected || [];\n  const success = body.success !== undefined ? body.success : true;\n  \n  // Enhanced action context for finderskeepers-v2\n  const enhancedDetails = {\n    ...details,\n    project: 'finderskeepers-v2',\n    infrastructure: 'FK2-optimized',\n    gpu_acceleration: true,\n    container_network: 'fk2_network',\n    rtx_2080ti: true,\n    docker_user: 'bitcainnet',\n    processed_at: new Date().toISOString()\n  };\n  \n  // Process different action types\n  let processedAction = {\n    session_id: sessionId,\n    action_type: actionType,\n    description: description,\n    details: enhancedDetails,\n    files_affected: Array.isArray(filesAffected) ? filesAffected : [filesAffected].filter(f => f),\n    success: success,\n    timestamp: new Date().toISOString(),\n    fk2_optimized: true\n  };\n  \n  // Extract conversation messages if present\n  if (actionType === 'conversation_message' && details.message_type && details.content) {\n    processedAction.conversation_data = {\n      message_type: details.message_type,\n      content: details.content,\n      context: details.context || {},\n      reasoning: details.reasoning || '',\n      tools_used: details.tools_used || [],\n      files_referenced: details.files_referenced || []\n    };\n  }\n  \n  // Extract code snippets if present\n  if (details.content && (details.content.includes('```') || details.content.includes('`'))) {\n    const codeBlocks = [];\n    const codeRegex = /```(\\w+)?\\n([\\s\\S]*?)```/g;\n    let match;\n    \n    while ((match = codeRegex.exec(details.content)) !== null) {\n      codeBlocks.push({\n        language: match[1] || 'plaintext',\n        code: match[2].trim()\n      });\n    }\n    \n    if (codeBlocks.length > 0) {\n      processedAction.code_snippets = codeBlocks;\n    }\n  }\n  \n  return [{ json: processedAction }];\n  \n} catch (error) {\n  console.error('FK2-MCP Action Processing Error:', error);\n  return [{ \n    json: { \n      error: true, \n      message: error.message, \n      fallback_data: $input.first().json,\n      processed_at: new Date().toISOString()\n    } \n  }];\n}"
+      },
+      "id": "process-action-data",
+      "name": "Process Action Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO agent_actions (action_id, session_id, action_type, description, details, files_affected, success, created_at) VALUES (CONCAT('action_', FLOOR(EXTRACT(EPOCH FROM NOW())), '_', SUBSTR(MD5(RANDOM()::TEXT), 1, 8)), $1, $2, $3, $4::jsonb, $5::jsonb, $6, NOW()) ON CONFLICT DO NOTHING RETURNING id, created_at",
+        "options": {}
+      },
+      "id": "store-action-db",
+      "name": "Store Action in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        800,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "xXR86ReDpjAarh4K",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_conversation",
+              "leftValue": "={{ $json.conversation_data !== undefined }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-conversation-data",
+      "name": "Has Conversation Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversation_messages (message_id, session_id, message_type, content, context, reasoning, tools_used, files_referenced, created_at, metadata) VALUES (CONCAT('msg_', FLOOR(EXTRACT(EPOCH FROM NOW())), '_', SUBSTR(MD5(RANDOM()::TEXT), 1, 8)), $1, $2, $3, $4::jsonb, $5, $6::jsonb, $7::jsonb, NOW(), $8::jsonb) ON CONFLICT DO NOTHING RETURNING id, created_at",
+        "options": {}
+      },
+      "id": "store-conversation-db",
+      "name": "Store Conversation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1248,
+        96
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "xXR86ReDpjAarh4K",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_code",
+              "leftValue": "={{ $json.code_snippets !== undefined && $json.code_snippets.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-code-snippets",
+      "name": "Has Code Snippets?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        928,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process code snippets for storage\nconst actionData = $input.first().json;\nconst codeSnippets = actionData.code_snippets || [];\n\nconst results = [];\ncodeSnippets.forEach((snippet, index) => {\n  results.push({\n    json: {\n      session_id: actionData.session_id,\n      language: snippet.language,\n      code: snippet.code,\n      extracted_from: 'conversation',\n      snippet_index: index,\n      fk2_extracted: true\n    }\n  });\n});\n\nreturn results;"
+      },
+      "id": "process-code-snippets",
+      "name": "Process Code Snippets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO code_snippets (session_id, language, code, extracted_at, metadata) VALUES ($1, $2, $3, NOW(), $4::jsonb) ON CONFLICT DO NOTHING RETURNING id, extracted_at",
+        "options": {}
+      },
+      "id": "store-code-snippets",
+      "name": "Store Code Snippets",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1600,
+        512
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "xXR86ReDpjAarh4K",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fk2_fastapi:80/api/diary/actions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"session_id\": \"{{ $json.session_id }}\", \"action_type\": \"{{ $json.action_type }}\", \"description\": \"{{ $json.description }}\", \"success\": {{ $json.success }}, \"files_affected\": {{ JSON.stringify($json.files_affected || []) }}, \"details\": {{ JSON.stringify($json.details || {}) }}, \"project_name\": \"finderskeepers-v2\", \"infrastructure\": \"FK2-optimized\", \"gpu_acceleration\": true}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "notify-fastapi-action",
+      "name": "Notify FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        304
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "action-response",
+      "name": "FK2-MCP Action Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1488,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for PostgreSQL insertion - FIX for queryReplacement issues\nconst results = [];\n\nfor (const item of $input.all()) {\n  const data = item.json;\n  \n  // Prepare action data with proper JSON stringification\n  const processedItem = {\n    json: {\n      // Original data passed through\n      ...data,\n      \n      // Pre-processed fields for PostgreSQL\n      db_session_id: data.session_id || null,\n      db_action_type: data.action_type || 'unknown',\n      db_description: data.description || '',\n      db_details: JSON.stringify(data.details || {}),\n      db_files_affected: JSON.stringify(data.files_affected || []),\n      db_success: data.success !== undefined ? data.success : true,\n      db_timestamp: new Date().toISOString(),\n      \n      // Conversation data preprocessing\n      db_conv_session_id: (data.conversation_data && data.conversation_data.session_id) || data.session_id || null,\n      db_conv_message_type: (data.conversation_data && data.conversation_data.message_type) || null,\n      db_conv_content: (data.conversation_data && data.conversation_data.content) || null,\n      db_conv_context: JSON.stringify((data.conversation_data && data.conversation_data.context) || {}),\n      db_conv_reasoning: (data.conversation_data && data.conversation_data.reasoning) || 'no_reasoning',\n      db_conv_tools_used: JSON.stringify((data.conversation_data && data.conversation_data.tools_used) || []),\n      db_conv_files_referenced: JSON.stringify((data.conversation_data && data.conversation_data.files_referenced) || []),\n      db_conv_metadata: JSON.stringify({\"project\": \"finderskeepers-v2\", \"fk2_processed\": true})\n    }\n  };\n  \n  results.push(processedItem);\n}\n\nreturn results;"
+      },
+      "id": "prepare-db-data",
+      "name": "Prepare DB Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "FK2-MCP Action Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Action Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Action Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare DB Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Action in DB": {
+      "main": [
+        [
+          {
+            "node": "Notify FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Conversation Data?": {
+      "main": [
+        [
+          {
+            "node": "Store Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Code Snippets?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Conversation": {
+      "main": [
+        [
+          {
+            "node": "Has Code Snippets?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Code Snippets?": {
+      "main": [
+        [
+          {
+            "node": "Process Code Snippets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Code Snippets": {
+      "main": [
+        [
+          {
+            "node": "Store Code Snippets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Code Snippets": {
+      "main": [
+        [
+          {
+            "node": "Notify FastAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify FastAPI": {
+      "main": [
+        [
+          {
+            "node": "FK2-MCP Action Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare DB Data": {
+      "main": [
+        [
+          {
+            "node": "Store Action in DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Conversation Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "versionId": "2f149a74-b143-485a-a278-842fb3522b43",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ac7d68b15823444389f1bad875ce608a91b830b9ddf7d7536c6dbf672c9a4af4"
+  },
+  "id": "QkzmJAi2jizGfjvS",
+  "tags": []
+}

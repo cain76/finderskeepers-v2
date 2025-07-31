@@ -1,0 +1,15 @@
+# Requirements for FindersKeepers v2 scripts
+# Specifically for entity extraction and data processing
+
+# Database drivers
+asyncpg>=0.29.0      # PostgreSQL async driver
+neo4j>=5.15.0        # Neo4j graph database driver
+
+# HTTP client for Ollama
+httpx>=0.26.0        # For calling Ollama API
+
+# Utilities
+python-dotenv>=1.0.0 # Environment variables
+
+# Optional but recommended
+aiofiles>=23.2.0     # Async file operations

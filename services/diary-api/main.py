@@ -19,6 +19,7 @@ from uuid import uuid4
 # Import API modules
 from app.api.v1.ingestion import ingestion_router
 from app.api.v1.diary import diary_router
+from app.api.v1.entity_extraction import router as entity_router
 from app.database.connection import db_manager
 from app.database.queries import StatsQueries, SessionQueries, DocumentQueries, ConversationQueries
 from app.api.chat_endpoints import ChatRequest, ChatResponse, process_chat_message
@@ -37,7 +38,7 @@ class OllamaClient:
     def __init__(self):
         self.base_url = os.getenv("OLLAMA_URL", "http://fk2_ollama:11434")
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "mxbai-embed-large")
-        self.chat_model = os.getenv("CHAT_MODEL", "llama3.2:3b")
+        self.chat_model = os.getenv("CHAT_MODEL", "llama3:8b")
         self.use_local = os.getenv("USE_LOCAL_LLM", "true").lower() == "true"
         
     async def get_embeddings(self, text: str) -> List[float]:
@@ -136,6 +137,7 @@ app.add_middleware(
 # Include routers
 app.include_router(ingestion_router)
 app.include_router(diary_router)
+app.include_router(entity_router)
 
 
 
@@ -331,35 +333,133 @@ async def generate_embeddings(request: EmbeddingRequest):
 
 @app.post("/api/knowledge/query", tags=["Knowledge"])
 async def query_knowledge(query: KnowledgeQuery):
-    """Query the knowledge graph with natural language using local LLM"""
+    """Query the knowledge graph with natural language using real Neo4j data"""
     try:
         logger.info(f"Knowledge query: {query.question}")
         
         # Generate embeddings for the query using local Ollama
         query_embeddings = await ollama_client.get_embeddings(query.question)
         
-        # Use local LLM to analyze the query
-        analysis_prompt = f"""
-        Analyze this knowledge query and provide a structured response:
-        Question: {query.question}
-        Project Context: {query.project or "general"}
+        # Initialize results
+        relationships = []
+        documents = []
         
-        Based on the question, what type of information would be most relevant?
-        Provide a brief analysis.
-        """
+        # Query Neo4j for actual relationships
+        if db_manager.neo4j_driver:
+            async with db_manager.neo4j_driver.session() as session:
+                # Find related entities based on the query
+                cypher_query = """
+                    MATCH (e1:Entity)-[r]->(e2:Entity)
+                    WHERE toLower(e1.name) CONTAINS toLower($query)
+                       OR toLower(e2.name) CONTAINS toLower($query)
+                       OR toLower(type(r)) CONTAINS toLower($query)
+                    RETURN e1.name as source, 
+                           type(r) as relationship, 
+                           e2.name as target,
+                           e1.type as source_type,
+                           e2.type as target_type,
+                           r.properties as properties
+                    LIMIT 50
+                """
+                
+                try:
+                    result = await session.run(cypher_query, query=query.question)
+                    records = await result.values()
+                    
+                    for record in records:
+                        relationships.append({
+                            "source": record[0],
+                            "relationship": record[1],
+                            "target": record[2],
+                            "source_type": record[3],
+                            "target_type": record[4],
+                            "properties": json.loads(record[5]) if record[5] else {}
+                        })
+                except Exception as neo4j_error:
+                    logger.warning(f"Neo4j query failed: {neo4j_error}")
+                
+                # Find documents containing the query entities
+                doc_cypher = """
+                    MATCH (d:Document)-[:CONTAINS]->(e:Entity)
+                    WHERE toLower(e.name) CONTAINS toLower($query)
+                    RETURN DISTINCT d.title as document, 
+                           d.project as project,
+                           collect(e.name) as entities
+                    LIMIT 20
+                """
+                
+                try:
+                    doc_result = await session.run(doc_cypher, query=query.question)
+                    doc_records = await doc_result.values()
+                    
+                    for record in doc_records:
+                        documents.append({
+                            "document": record[0],
+                            "project": record[1],
+                            "entities": record[2]
+                        })
+                except Exception as doc_error:
+                    logger.warning(f"Document query failed: {doc_error}")
+        else:
+            logger.warning("Neo4j driver not available - using PostgreSQL fallback")
+            
+            # Fallback to PostgreSQL knowledge_entities table
+            async with db_manager.get_postgres_connection() as conn:
+                entities = await conn.fetch("""
+                    SELECT DISTINCT 
+                        ke.entity_name,
+                        ke.entity_type,
+                        d.title as document_title,
+                        d.project,
+                        ke.metadata
+                    FROM knowledge_entities ke
+                    JOIN documents d ON ke.source_doc_id = d.id
+                    WHERE LOWER(ke.entity_name) LIKE LOWER($1)
+                    LIMIT 20
+                """, f"%{query.question}%")
+                
+                for entity in entities:
+                    documents.append({
+                        "document": entity['document_title'],
+                        "project": entity['project'],
+                        "entities": [entity['entity_name']]
+                    })
         
-        analysis = await ollama_client.generate_text(analysis_prompt, max_tokens=256)
+        # Build response based on actual data
+        has_data = len(relationships) > 0 or len(documents) > 0
+        
+        if has_data:
+            answer = f"Found {len(relationships)} relationships and {len(documents)} related documents for '{query.question}'"
+        else:
+            # Use Ollama to generate a helpful response even if no data found
+            analysis_prompt = f"""
+            The user asked about: {query.question}
+            Project context: {query.project or "general"}
+            
+            No specific data was found in the knowledge graph.
+            Provide a helpful response suggesting what information might be available or how to find it.
+            Keep it brief and constructive.
+            """
+            
+            answer = await ollama_client.generate_text(analysis_prompt, max_tokens=256)
+            if not answer:
+                answer = f"No specific relationships found for '{query.question}'. Try running entity extraction first or search for broader terms."
         
         response = {
-            "answer": analysis if analysis else f"Based on your knowledge graph, regarding '{query.question}', here's what I found...",
+            "answer": answer,
+            "relationships": relationships[:20],  # Limit to top 20
+            "documents": documents[:10],  # Limit to top 10
             "sources": [
-                {"type": "session", "id": "session_001", "relevance": 0.9},
-                {"type": "document", "id": "docker_procedures", "relevance": 0.8}
+                {
+                    "type": "neo4j_graph" if db_manager.neo4j_driver else "postgres_fallback",
+                    "id": f"query_{query.question[:20]}",
+                    "relevance": 1.0
+                }
             ],
             "context": query.project or "general",
-            "confidence": 0.85,
+            "confidence": 0.9 if has_data else 0.3,
             "embeddings_generated": len(query_embeddings) > 0,
-            "local_llm_used": ollama_client.use_local and analysis != ""
+            "data_source": "real" if has_data else "generated"
         }
         
         return response

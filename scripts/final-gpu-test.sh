@@ -37,8 +37,8 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "🎯 Next steps:"
     echo "   1. Log out and back in to fix docker permissions"
-    echo "   2. Download models: docker exec ollama ollama pull llama3.2:3b"
-    echo "   3. Test chat: docker exec ollama ollama run llama3.2:3b"
+    echo "   2. Download models: docker exec ollama ollama pull llama3:8b"
+    echo "   3. Test chat: docker exec ollama ollama run llama3:8b"
 else
     echo "❌ GPU test failed"
 fi

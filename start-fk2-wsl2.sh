@@ -108,7 +108,7 @@ docker compose ps
 if docker compose ps ollama | grep -q "running"; then
     echo -e "${YELLOW}Setting up Ollama models for RTX 2080 Ti...${NC}"
     docker compose exec -T ollama ollama pull mxbai-embed-large || true
-    docker compose exec -T ollama ollama pull llama3.2:3b || true
+    docker compose exec -T ollama ollama pull llama3:8b || true
     echo -e "${GREEN}✓ Ollama models ready${NC}"
 fi
 

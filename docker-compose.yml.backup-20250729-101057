@@ -7,7 +7,7 @@ services:
   # WORKFLOW AUTOMATION - UPDATED n8n
   # ========================================
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest  # Official n8n registry with latest stable version
+    image: n8nio/n8n:latest  # Latest stable version with PostgreSQL backend
     container_name: fk2_n8n
     restart: unless-stopped
     ports:
@@ -25,7 +25,7 @@ services:
       - N8N_PORT=5678
       
       # Security & Performance
-      - GENERIC_TIMEZONE=America/Chicago
+      - GENERIC_TIMEZONE=America/New_York
       - N8N_JWT_SECRET=${N8N_JWT_SECRET:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MzY1MDU0ZS05YjY0LTRiY2ItOTFhZS0yMWRjNTc3NzRjMjUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzQyNjU4ODc0fQ.P4R2cmeV9uwsUH3Dohf8kvhEXMIoAu_3MwElSvvyiH8}
       
       # Fix deprecation warnings
@@ -75,10 +75,8 @@ services:
               count: 1
               capabilities: [gpu]
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     networks:
       shared-network:
         aliases:
@@ -119,7 +117,7 @@ services:
       - OLLAMA_URL=http://ollama:11434
       - USE_LOCAL_LLM=true
       - EMBEDDING_MODEL=mxbai-embed-large  # DO NOT CHANGE - 1024 dimensions required
-      - CHAT_MODEL=llama3:8b  # UPGRADED from 3b to 8b for better performance
+      - CHAT_MODEL=llama3.2:7b  # UPGRADED from 3b to 7b for better performance
       
       # AI API Keys (fallback if local unavailable)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -169,11 +167,6 @@ services:
       - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -h localhost -U finderskeepers -d finderskeepers_v2']
-      interval: 5s
-      timeout: 5s
-      retries: 10
     command: >
       postgres -c shared_preload_libraries=vector 
                -c log_destination=stderr 
@@ -276,11 +269,6 @@ services:
     volumes:
       - redis_data:/data
       - ./config/redis/redis.conf:/etc/redis/redis.conf:ro
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
     networks:
       shared-network:
         aliases:
@@ -315,7 +303,7 @@ services:
       - OLLAMA_BATCH_SIZE=512            # Larger batch for better throughput
       
       # Model Configuration
-      - OLLAMA_DEFAULT_CHAT_MODEL=llama3:8b       # Default chat model
+      - OLLAMA_DEFAULT_CHAT_MODEL=llama3.2:7b       # Default chat model
       - OLLAMA_DEFAULT_EMBED_MODEL=mxbai-embed-large  # Default embedding model
       
     volumes:
@@ -428,7 +416,7 @@ volumes:
 #
 # 3. bitcain-specific optimizations:
 #    - RTX 2080 Ti GPU acceleration across all services
-#    - Upgraded to llama3:8b for better AI responses
+#    - Upgraded to llama3.2:7b for better AI responses
 #    - Kept mxbai-embed-large for compatibility (1024 dimensions)
 #    - Enhanced Ollama with flash attention and optimized memory usage
 #    - PostgreSQL backend for n8n data persistence
@@ -442,7 +430,7 @@ volumes:
 #    - DOCKER_TOKEN (your Docker hub token)
 #
 # 5. Model Notes:
-#    - Chat Model: llama3:8b (4.7GB VRAM) - Upgraded from 3b
+#    - Chat Model: llama3.2:7b (7GB VRAM) - Upgraded from 3b
 #    - Embedding Model: mxbai-embed-large (1.5GB VRAM) - DO NOT CHANGE
 #    - Total VRAM usage: ~8.5GB (safe for 11GB RTX 2080 Ti)
 #

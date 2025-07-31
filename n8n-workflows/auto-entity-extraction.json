@@ -1,0 +1,211 @@
+{
+  "name": "FK2 - Auto Entity Extraction",
+  "nodes": [
+    {
+      "id": "a9a8c4f5-8b3e-4f2a-9c1d-2e3f4a5b6c7d",
+      "name": "PostgreSQL Trigger",
+      "type": "n8n-nodes-base.postgresTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "FK2 PostgreSQL"
+        }
+      },
+      "parameters": {
+        "triggerMode": "listenTrigger",
+        "schema": "public",
+        "tableName": "documents",
+        "channelName": "new_document_added",
+        "events": ["INSERT"],
+        "additionalFields": {}
+      }
+    },
+    {
+      "id": "b8a7c3f4-7a2d-3e1b-8b0c-1d2e3f4a5b6c",
+      "name": "Extract Document Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [450, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "document_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "project",
+              "value": "={{ $json.project }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c7a6b2e3-6a1c-2d0a-7a9b-0c1d2e3f4a5b",
+      "name": "Call Entity Extraction API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://fk2_fastapi:80/api/entities/extract",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "document_id",
+              "value": "={{ $json.document_id }}"
+            },
+            {
+              "name": "force_reprocess",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "d6a5b1d2-5a0b-1c9a-6a8a-9b0c1d2e3f4a",
+      "name": "Check Extraction Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "success"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e5a4a0c1-4a9a-0b8a-5a7a-8a9b0c1d2e3f",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1050, 200],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "FK2 PostgreSQL"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "system_logs",
+        "columns": "event_type,event_data,created_at",
+        "values": "entity_extraction_success,{{ JSON.stringify($json) }},{{ new Date().toISOString() }}"
+      }
+    },
+    {
+      "id": "f4a3a9b0-3a8a-9a7a-4a6a-7a8a9b0c1d2e",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "FK2 PostgreSQL"
+        }
+      },
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "system_logs",
+        "columns": "event_type,event_data,created_at",
+        "values": "entity_extraction_error,{{ JSON.stringify($json) }},{{ new Date().toISOString() }}"
+      }
+    }
+  ],
+  "connections": {
+    "PostgreSQL Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Document Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Document Info": {
+      "main": [
+        [
+          {
+            "node": "Call Entity Extraction API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Entity Extraction API": {
+      "main": [
+        [
+          {
+            "node": "Check Extraction Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Extraction Result": {
+      "main": [
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateId": "fk2_entity_extraction_auto"
+  },
+  "tags": [
+    {
+      "name": "FindersKeepers",
+      "createdAt": "2025-07-29T00:00:00.000Z"
+    }
+  ]
+}

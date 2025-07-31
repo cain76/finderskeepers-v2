@@ -1,0 +1,176 @@
+{
+  "name": "FK2-MCP Enhanced Agent Session Logger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "session-logger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-session-logger",
+      "name": "FK2-MCP Session Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        288,
+        304
+      ],
+      "webhookId": "3186fd8f-788e-420f-b7de-1dbbb979d9c9",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced FK2-MCP session processing for finderskeepers-v2\ntry {\n  const body = $input.first().json.body || $input.first().json;\n  \n  // Extract and validate session data\n  const sessionId = body.session_id || `fk2_sess_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;\n  const actionType = body.action_type || 'session_start';\n  const agentType = body.agent_type || 'claude-desktop';\n  const userId = body.user_id || 'bitcain';\n  const project = body.project || 'finderskeepers-v2';\n  const reason = body.reason || null;\n  const context = body.context || {};\n  \n  // Enhanced finderskeepers-v2 context\n  const enhancedContext = {\n    ...context,\n    project: 'finderskeepers-v2',\n    gpu_acceleration: true,\n    gpu_model: 'RTX_2080Ti',\n    os: 'Ubuntu_24.04.2',\n    docker_user: 'bitcainnet',\n    infrastructure: 'fk2_containers',\n    user_agent: body.user_agent || 'FK2-MCP-Server',\n    mcp_protocol: true,\n    nvidia_rtx_2080ti: true,\n    processed_at: new Date().toISOString()\n  };\n  \n  // Determine session operations\n  const isSessionStart = actionType === 'session_start';\n  const isSessionEnd = actionType === 'session_end';\n  const isSessionResume = actionType === 'session_resume';\n  \n  // Enhanced output with fk2 optimizations\n  return [{\n    json: {\n      session_id: sessionId,\n      agent_type: agentType,\n      user_id: userId,\n      project: project,\n      action_type: actionType,\n      reason: reason,\n      context: enhancedContext,\n      is_session_start: isSessionStart,\n      is_session_end: isSessionEnd,\n      is_session_resume: isSessionResume,\n      timestamp: new Date().toISOString(),\n      fk2_enhanced: true,\n      fk2_optimized: true,\n      bitcain_infrastructure: true\n    }\n  }];\n  \n} catch (error) {\n  console.error('FK2-MCP Session Processing Error:', error);\n  return [{ \n    json: { \n      error: true, \n      message: error.message, \n      fallback_data: $input.first().json,\n      processed_at: new Date().toISOString()\n    } \n  }];\n}"
+      },
+      "id": "process-fk2-session",
+      "name": "Process FK2 Session Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is_start",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "caseSensitive": true
+              },
+              "leftValue": "={{ $json.action_type }}",
+              "rightValue": "session_start"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-session-action",
+      "name": "Route Session Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO agent_sessions (session_id, agent_type, user_id, project, status, start_time, context, created_at, gpu_acceleration, platform, metadata) VALUES ($1, $2, $3, $4, 'active', NOW(), $5::jsonb, NOW(), true, 'FK2-MCP-Server', '{\"fk2_optimized\": true}'::jsonb) ON CONFLICT (session_id) DO UPDATE SET status = 'active', start_time = NOW(), context = EXCLUDED.context, updated_at = NOW() RETURNING session_id, start_time",
+        "options": {
+          "connectionTimeout": 15,
+          "delayClosingIdleConnection": 30,
+          "queryBatching": "independently",
+          "queryReplacement": ""
+        }
+      },
+      "id": "create-session-db",
+      "name": "Create/Update Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "4mhrwwjil0pCpcn1",
+          "name": "Postgres account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"project\": \"finderskeepers-v2\",\n  \"infrastructure\": \"FK2-optimized\",\n  \"action\": \"{{ $('Process FK2 Session Data').item.json.action_type }}\",\n  \"session_id\": \"{{ $('Process FK2 Session Data').item.json.session_id }}\",\n  \"user_id\": \"{{ $('Process FK2 Session Data').item.json.user_id }}\",\n  \"agent_type\": \"{{ $('Process FK2 Session Data').item.json.agent_type }}\",\n  \"timestamp\": \"{{ $('Process FK2 Session Data').item.json.timestamp }}\",\n  \"performance_optimized_2025\": true,\n  \"gpu_acceleration\": true,\n  \"rtx_2080ti_optimized\": true,\n  \"database_status\": \"{{ $('Create/Update Session').item ? 'success' : 'skipped' }}\"\n}",
+        "options": {}
+      },
+      "id": "session-response",
+      "name": "FK2-MCP Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1088,
+        208
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "FK2-MCP Session Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process FK2 Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process FK2 Session Data": {
+      "main": [
+        [
+          {
+            "node": "Route Session Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Session Action": {
+      "main": [
+        [
+          {
+            "node": "Create/Update Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create/Update Session": {
+      "main": [
+        [
+          {
+            "node": "FK2-MCP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "versionId": "55c8366a-6870-4a14-81c8-903619e3f04c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ac7d68b15823444389f1bad875ce608a91b830b9ddf7d7536c6dbf672c9a4af4"
+  },
+  "id": "7VPQgxYZJmbjY8Xy",
+  "tags": []
+}

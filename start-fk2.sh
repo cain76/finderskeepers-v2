@@ -182,8 +182,8 @@ if docker compose ps ollama | grep -q "running"; then
     docker compose exec -T ollama ollama pull mxbai-embed-large || true
     
     # Pull chat model optimized for RTX 2080 Ti (11GB VRAM)
-    echo "Pulling chat model (llama3.2:3b)..."
-    docker compose exec -T ollama ollama pull llama3.2:3b || true
+    echo "Pulling chat model (llama3:8b)..."
+    docker compose exec -T ollama ollama pull llama3:8b || true
     
     echo -e "${GREEN}✓ Ollama models ready${NC}"
 fi

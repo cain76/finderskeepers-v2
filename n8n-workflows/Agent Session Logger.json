@@ -67,7 +67,18 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO agent_sessions (session_id, agent_type, user_id, project, status, start_time, context, created_at, gpu_acceleration, platform, metadata) VALUES ($1, $2, $3, $4, 'active', NOW(), $5::jsonb, NOW(), true, 'FK2-MCP-Server', '{\"fk2_optimized\": true}'::jsonb) ON CONFLICT (session_id) DO UPDATE SET status = 'active', start_time = NOW(), context = EXCLUDED.context, updated_at = NOW() RETURNING session_id, start_time",
+      "query": "INSERT INTO agent_sessions (session_id, agent_type, user_id, project, status, start_time, context, created_at, gpu_acceleration, platform) VALUES ($1, $2, $3, $4, 'active', NOW(), $5::jsonb, NOW(), true, 'FK2-MCP-Server') ON CONFLICT (session_id) DO UPDATE SET status = 'active', start_time = NOW(), context = EXCLUDED.context, updated_at = NOW() RETURNING session_id, start_time",
+        "additionalFields": {
+          "queryParameters": {
+            "values": [
+              {"name": "session_id", "value": "={{ $json.session_id }}"},
+              {"name": "agent_type", "value": "={{ $json.agent_type }}"},
+              {"name": "user_id", "value": "={{ $json.user_id }}"},
+              {"name": "project", "value": "={{ $json.project }}"},
+              {"name": "context", "value": "={{ JSON.stringify($json.context || {}) }}"}
+            ]
+          }
+        },
         "options": {
           "connectionTimeout": 15,
           "delayClosingIdleConnection": 30,

@@ -36,6 +36,18 @@
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO agent_actions (action_id, session_id, action_type, description, details, files_affected, success, created_at) VALUES (CONCAT('action_', FLOOR(EXTRACT(EPOCH FROM NOW())), '_', SUBSTR(MD5(RANDOM()::TEXT), 1, 8)), $1, $2, $3, $4::jsonb, $5::jsonb, $6, NOW()) ON CONFLICT DO NOTHING RETURNING id, created_at",
+        "additionalFields": {
+          "queryParameters": {
+            "values": [
+              {"name": "session_id", "value": "={{ $json.session_id }}"},
+              {"name": "action_type", "value": "={{ $json.action_type }}"},
+              {"name": "description", "value": "={{ $json.description }}"},
+              {"name": "details", "value": "={{ JSON.stringify($json.details || {}) }}"},
+              {"name": "files_affected", "value": "={{ JSON.stringify($json.files_affected || []) }}"},
+              {"name": "success", "value": "={{ $json.success }}"}
+            ]
+          }
+        },
         "options": {}
       },
       "id": "store-action-db",
@@ -91,7 +103,20 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO conversation_messages (message_id, session_id, message_type, content, context, reasoning, tools_used, files_referenced, created_at, metadata) VALUES (CONCAT('msg_', FLOOR(EXTRACT(EPOCH FROM NOW())), '_', SUBSTR(MD5(RANDOM()::TEXT), 1, 8)), $1, $2, $3, $4::jsonb, $5, $6::jsonb, $7::jsonb, NOW(), $8::jsonb) ON CONFLICT DO NOTHING RETURNING id, created_at",
+        "query": "INSERT INTO conversation_messages (message_id, session_id, message_type, content, context, reasoning, tools_used, files_referenced, created_at) VALUES (CONCAT('msg_', FLOOR(EXTRACT(EPOCH FROM NOW())), '_', SUBSTR(MD5(RANDOM()::TEXT), 1, 8)), $1, $2, $3, $4::jsonb, $5, $6::jsonb, $7::jsonb, NOW()) ON CONFLICT DO NOTHING RETURNING id, created_at",
+        "additionalFields": {
+          "queryParameters": {
+            "values": [
+              {"name": "session_id", "value": "={{ $json.session_id }}"},
+              {"name": "message_type", "value": "={{ $json.conversation_data.message_type }}"},
+              {"name": "content", "value": "={{ $json.conversation_data.content }}"},
+              {"name": "context", "value": "={{ JSON.stringify($json.conversation_data.context || {}) }}"},
+              {"name": "reasoning", "value": "={{ $json.conversation_data.reasoning }}"},
+              {"name": "tools_used", "value": "={{ JSON.stringify($json.conversation_data.tools_used || []) }}"},
+              {"name": "files_referenced", "value": "={{ JSON.stringify($json.conversation_data.files_referenced || []) }}"}
+            ]
+          }
+        },
         "options": {}
       },
       "id": "store-conversation-db",
@@ -160,7 +185,16 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO code_snippets (session_id, language, code, extracted_at, metadata) VALUES ($1, $2, $3, NOW(), $4::jsonb) ON CONFLICT DO NOTHING RETURNING id, extracted_at",
+        "query": "INSERT INTO code_snippets (session_id, language, code, extracted_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT DO NOTHING RETURNING id, extracted_at",
+        "additionalFields": {
+          "queryParameters": {
+            "values": [
+              {"name": "session_id", "value": "={{ $json.session_id }}"},
+              {"name": "language", "value": "={{ $json.language }}"},
+              {"name": "code", "value": "={{ $json.code }}"}
+            ]
+          }
+        },
         "options": {}
       },
       "id": "store-code-snippets",
@@ -371,7 +405,7 @@
     "saveManualExecutions": true,
     "saveExecutionProgress": true
   },
-  "versionId": "2f149a74-b143-485a-a278-842fb3522b43",
+  "versionId": "3366611d-b674-4dcc-a2cd-e71ad860e172",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "ac7d68b15823444389f1bad875ce608a91b830b9ddf7d7536c6dbf672c9a4af4"

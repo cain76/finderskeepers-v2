@@ -655,6 +655,10 @@ async def end_session(reason: str = "session_complete") -> str:
         return "❌ No active session to end"
 
     try:
+        # FIX: Initialize database pool if not already done
+        if db_pool is None:
+            await initialize_database()
+        
         # Generate comprehensive session summary using middleware if available
         if middleware_available and 'conversation_middleware' in globals():
             session_summary = await conversation_middleware.generate_session_summary()
@@ -723,6 +727,10 @@ async def resume_session(max_messages: int = 20) -> str:
     global current_session_id, session_start_time, db_pool
     
     try:
+        # FIX: Initialize database pool if not already done
+        if db_pool is None:
+            await initialize_database()
+        
         # Find the most recent ended session with summary
         async with db_pool.acquire() as conn:
             recent_session = await conn.fetchrow("""
@@ -803,6 +811,10 @@ async def get_session_status() -> str:
         return "❌ No active session"
     
     try:
+        # FIX: Initialize database pool if not already done
+        if db_pool is None:
+            await initialize_database()
+        
         # Get session info from database
         async with db_pool.acquire() as conn:
             session_info = await conn.fetchrow("""
@@ -1269,6 +1281,10 @@ async def query_session_history(query: str, limit: int = 10) -> str:
     global db_pool
     
     try:
+        # FIX: Initialize database pool if not already done
+        if db_pool is None:
+            await initialize_database()
+        
         await log_action("session_history_query", f"Query: {query}", {"query": query})
         
         async with db_pool.acquire() as conn:

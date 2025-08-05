@@ -4,7 +4,9 @@
 
 services:
   # ========================================
-  # WORKFLOW AUTOMATION - UPDATED n8n
+  # WORKFLOW AUTOMATION - UPDATED n8n (OPTIONAL - Bypassed for MCP)
+  # n8n is now optional since MCP server uses direct FastAPI integration
+  # Keep this running if you need it for other workflows
   # ========================================
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest  # Official n8n registry with latest stable version
@@ -86,6 +88,7 @@ services:
 
   # ========================================
   # API BACKEND - Enhanced for bitcain with Ollama 7B
+  # NOW HANDLES DIRECT MCP INTEGRATION - Bypassing n8n for reliability
   # ========================================
   fastapi:
     build:
@@ -131,6 +134,7 @@ services:
       - N8N_API_URL=http://n8n:5678/api/v1
       
     volumes:
+      - ./services/diary-api:/app
       - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       resources:
@@ -413,14 +417,15 @@ volumes:
   ollama_data:
 
 # ========================================
-# bitcain USAGE INSTRUCTIONS - UPDATED FOR 7B MODEL
+# bitcain USAGE INSTRUCTIONS - UPDATED FOR DIRECT API INTEGRATION
 # ========================================
 # 1. Start all services:
 #    docker compose up -d
 #
 # 2. Access points:
-#    - n8n Workflows: http://localhost:5678 (jeremy.cn.davis@gmail.com/Toolman7424!)
-#    - FastAPI Docs: http://localhost:8000/docs
+#    - FastAPI Docs: http://localhost:8000/docs (NOW WITH MCP ENDPOINTS)
+#    - MCP Health: http://localhost:8000/api/mcp/health
+#    - n8n Workflows: http://localhost:5678 (OPTIONAL - jeremy.cn.davis@gmail.com/Toolman7424!)
 #    - Neo4j Browser: http://localhost:7474 (neo4j/fk2025neo4j)
 #    - Qdrant API: http://localhost:6333
 #    - Frontend UI: http://localhost:3000
@@ -431,8 +436,8 @@ volumes:
 #    - Upgraded to llama3:8b for better AI responses
 #    - Kept mxbai-embed-large for compatibility (1024 dimensions)
 #    - Enhanced Ollama with flash attention and optimized memory usage
-#    - PostgreSQL backend for n8n data persistence
-#    - Improved security and performance settings
+#    - PostgreSQL backend for data persistence
+#    - DIRECT MCP->FastAPI integration (no n8n middleman)
 #
 # 4. Environment variables needed:
 #    - OPENAI_API_KEY (optional)
@@ -449,3 +454,9 @@ volumes:
 # 6. First-time setup:
 #    The Ollama container will automatically download required models on first start.
 #    This may take 10-15 minutes depending on internet speed.
+#
+# 7. MCP Direct Integration:
+#    - Session, action, and conversation logging now goes directly to FastAPI
+#    - No more silent n8n failures - immediate database persistence
+#    - Check MCP health: http://localhost:8000/api/mcp/health
+#    - Recent sessions: http://localhost:8000/api/mcp/sessions/recent

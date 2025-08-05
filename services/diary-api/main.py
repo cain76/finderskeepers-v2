@@ -20,6 +20,7 @@ from uuid import uuid4
 from app.api.v1.ingestion import ingestion_router
 from app.api.v1.diary import diary_router
 from app.api.v1.entity_extraction import router as entity_router
+from app.api.mcp import router as mcp_router  # NEW: MCP direct integration
 from app.database.connection import db_manager
 from app.database.queries import StatsQueries, SessionQueries, DocumentQueries, ConversationQueries
 from app.api.chat_endpoints import ChatRequest, ChatResponse, process_chat_message
@@ -138,6 +139,7 @@ app.add_middleware(
 app.include_router(ingestion_router)
 app.include_router(diary_router)
 app.include_router(entity_router)
+app.include_router(mcp_router, prefix="/api/mcp")  # NEW: MCP direct integration bypassing n8n
 
 
 

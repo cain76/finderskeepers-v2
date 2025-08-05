@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-FindersKeepers v2 Enhanced MCP Server (fk2-mcp) - FIXED VERSION
-Modern FastMCP implementation for 2025 best practices
-Optimized for bitcain.net Claude Desktop integration
+FindersKeepers v2 Enhanced MCP Server (fk2-mcp) - DIRECT FASTAPI INTEGRATION
+Modern FastMCP implementation for 2025 best practices - bypassing n8n
+Optimized for bitcain.net Claude Desktop integration with direct API logging
+No more silent failures - direct database persistence!
 """
 
 import asyncio
@@ -50,15 +51,13 @@ FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 NEO4J_URL = os.getenv("NEO4J_URL", "bolt://localhost:7687")
 
-# CORRECTED: Use the ACTUAL n8n webhook endpoints that exist in active workflows
-N8N_BASE_URL = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678")
+# UPDATED: Direct FastAPI endpoints bypassing n8n completely
+SESSION_START_WEBHOOK = f"{FASTAPI_URL}/api/mcp/session/start"
+SESSION_END_WEBHOOK = f"{FASTAPI_URL}/api/mcp/session/end"
+ACTION_WEBHOOK = f"{FASTAPI_URL}/api/mcp/action"
 
-# FIXED: Use correct webhook endpoints from active n8n workflows
-SESSION_WEBHOOK = f"{N8N_BASE_URL}/webhook/session-logger"       # FK2-MCP Enhanced Agent Session Logger
-ACTION_WEBHOOK = f"{N8N_BASE_URL}/webhook/action-tracker"        # FK2-MCP Agent Action Tracker
-
-# CONVERSATION LOGGING: action-tracker webhook processes conversation_message actions  
-CONVERSATION_WEBHOOK = f"{N8N_BASE_URL}/webhook/action-tracker"  # Same as ACTION_WEBHOOK
+# CONVERSATION LOGGING: Same endpoint handles both actions and conversations
+CONVERSATION_WEBHOOK = ACTION_WEBHOOK  # Actions include conversation messages
 
 async def initialize_database():
     """Initialize database connection pool with fixed concurrency settings"""
@@ -97,7 +96,7 @@ async def initialize_database():
         return False
 
 async def log_action(action_type: str, description: str, details: Dict):
-    """Log action via n8n webhook with enhanced error handling AND conversation capture"""
+    """Log action via FastAPI with enhanced error handling AND conversation capture"""
     global current_session_id
     if not current_session_id:
         return
@@ -109,7 +108,7 @@ async def log_action(action_type: str, description: str, details: Dict):
             query = details.get('query', description)
             await capture_conversation_message("tool_execution", f"User executed {action_type}: {query}")
         
-        # Continue with normal action logging
+        # Continue with normal action logging via FastAPI
         timeout_config = httpx.Timeout(20.0, connect=5.0, read=15.0)
         async with httpx.AsyncClient(timeout=timeout_config) as client:
             action_data = {
@@ -124,11 +123,10 @@ async def log_action(action_type: str, description: str, details: Dict):
             
             response = await client.post(ACTION_WEBHOOK, json=action_data)
             
-            # FIXED: Accept any successful response
             if 200 <= response.status_code < 300:
-                logger.debug(f"✅ Action logged: {action_type}")
+                logger.debug(f"✅ Action logged via FastAPI: {action_type}")
             else:
-                logger.warning(f"Action webhook returned {response.status_code}")
+                logger.warning(f"Action endpoint returned {response.status_code}")
             
     except httpx.TimeoutException:
         logger.debug(f"Action logging timeout (non-critical): {action_type}")
@@ -176,10 +174,10 @@ async def close_database_pool():
 
 async def capture_conversation_message(message_type: str, content: str, metadata: dict = None):
     """
-    CRITICAL FUNCTION: Send every conversation message to n8n for processing
+    CRITICAL FUNCTION: Send every conversation message to FastAPI for processing
     
-    This is the CORE of FindersKeepers v2 - without this, no conversation logging,
-    no vector embeddings, no knowledge graph relations, no semantic search!
+    This is the CORE of FindersKeepers v2 - direct API integration for reliability!
+    No more silent failures, immediate database persistence.
     
     Usage:
         await capture_conversation_message("user_message", "Hello Claude!")
@@ -191,7 +189,7 @@ async def capture_conversation_message(message_type: str, content: str, metadata
         content: The actual message content
         metadata: Additional context data
         
-    This function sends to n8n agent-logger webhook which triggers:
+    This function sends to FastAPI which handles:
     1. Database storage in PostgreSQL
     2. Vector embedding generation via Ollama
     3. Qdrant vector database storage  
@@ -207,7 +205,7 @@ async def capture_conversation_message(message_type: str, content: str, metadata
     try:
         payload = {
             "session_id": current_session_id,
-            "action_type": "conversation_message",  # CRITICAL: This triggers the full pipeline
+            "action_type": "conversation_message",
             "description": f"{message_type}: {content[:100]}...",
             "details": {
                 "message_type": message_type,
@@ -228,23 +226,22 @@ async def capture_conversation_message(message_type: str, content: str, metadata
             "source": "fk2_mcp_server"
         }
         
-        # CRITICAL: Send to n8n agent-logger webhook (Docker container: fk2_n8n:5678)
-        # This webhook processes conversation data through the full FindersKeepers v2 pipeline
+        # Direct FastAPI call - no more n8n middleman!
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
             response = await client.post(CONVERSATION_WEBHOOK, json=payload)
             
             if 200 <= response.status_code < 300:
-                logger.debug(f"✅ Conversation logged: {message_type} ({len(content)} chars)")
+                logger.debug(f"✅ Conversation logged via FastAPI: {message_type} ({len(content)} chars)")
             else:
-                logger.warning(f"⚠️ Conversation webhook returned HTTP {response.status_code}")
+                logger.warning(f"⚠️ FastAPI returned HTTP {response.status_code}")
             
     except httpx.TimeoutException:
         logger.debug(f"Conversation logging timeout (non-critical): {message_type}")
     except httpx.ConnectError:
-        logger.warning(f"❌ Cannot connect to n8n container - check Docker network: {message_type}")
+        logger.warning(f"❌ Cannot connect to FastAPI - check Docker container: {message_type}")
     except Exception as e:
         logger.error(f"❌ CRITICAL: Conversation capture failed - {e}")
-        logger.error("This breaks the entire FindersKeepers v2 memory system!")
+        logger.error("Check FastAPI logs for database connection issues!")
 
 # =============================================================================
 # FASTMCP 2.9+ MIDDLEWARE FOR AUTOMATIC CONVERSATION CAPTURE
@@ -523,14 +520,14 @@ async def capture_this_conversation(user_message: str, assistant_response: str =
 
 @mcp.tool()
 async def start_session(project: str = "finderskeepers-v2", user_id: str = "bitcain") -> str:
-    """Start a new FindersKeepers v2 session with enhanced error handling"""
+    """Start a new FindersKeepers v2 session with direct FastAPI integration"""
     global current_session_id, session_start_time
     
     # Generate new session ID
     new_session_id = f"fk2_sess_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
     
     try:
-        # FIX: Enhanced webhook call with better error handling
+        # Direct FastAPI call for session start
         session_data = {
             "session_id": new_session_id,
             "action_type": "session_start",
@@ -541,18 +538,15 @@ async def start_session(project: str = "finderskeepers-v2", user_id: str = "bitc
             "source": "fk2_mcp_server"
         }
         
-        # FIXED: Increased timeout to allow for database retries
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0, connect=10.0, read=20.0)  # Increased from 15s
-        ) as client:
-            response = await client.post(SESSION_WEBHOOK, json=session_data)
+        # Call FastAPI directly
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0, read=20.0)) as client:
+            response = await client.post(SESSION_START_WEBHOOK, json=session_data)
             
-            # FIXED: Accept any 2xx response, not just 200
             if 200 <= response.status_code < 300:
                 current_session_id = new_session_id
                 session_start_time = datetime.now()
                 
-                logger.info(f"✅ Session started: {new_session_id}")
+                logger.info(f"✅ Session started via FastAPI: {new_session_id}")
                 
                 return f"""
 🚀 **FindersKeepers v2 Session Started Successfully**
@@ -562,89 +556,34 @@ async def start_session(project: str = "finderskeepers-v2", user_id: str = "bitc
 **User**: {user_id}
 **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-✅ **n8n Webhook Response**: HTTP {response.status_code}
-✅ **Database Integration**: Active with error handling
+✅ **FastAPI Direct Integration**: HTTP {response.status_code}
+✅ **Database Integration**: PostgreSQL direct connection
 ✅ **GPU Acceleration**: RTX 2080 Ti enabled
-✅ **Session Management**: Full lifecycle tracking enabled
+✅ **n8n Bypassed**: Direct API logging for reliability
 
 **Available tools**: end_session, resume_session, vector_search, database_query, knowledge_graph_search
                 """
             else:
-                # FIXED: Better error reporting with graceful fallback
+                # Better error reporting
                 try:
-                    error_detail = response.text[:500]
+                    error_detail = response.json()
                 except:
-                    error_detail = "Unable to read response"
+                    error_detail = response.text[:500]
                 
-                logger.warning(f"n8n webhook returned HTTP {response.status_code}: {error_detail}")
-                
-                # STILL CREATE SESSION LOCALLY for functionality
-                current_session_id = new_session_id
-                session_start_time = datetime.now()
-                
-                return f"""
-⚠️ **Session Started with Partial Success**
-
-**Session ID**: {new_session_id}
-**Status**: Local session active, webhook logging degraded
-**n8n Response**: HTTP {response.status_code}
-
-**Note**: Core functionality available, session logging may be incomplete.
-                """
+                logger.error(f"FastAPI returned HTTP {response.status_code}: {error_detail}")
+                raise Exception(f"FastAPI error: {response.status_code}")
                 
     except httpx.TimeoutException as e:
-        logger.warning(f"Session webhook timeout (normal if n8n is processing): {e}")
-        
-        # FIXED: Create session locally even if webhook times out
-        current_session_id = new_session_id
-        session_start_time = datetime.now()
-        
-        return f"""
-⚠️ **Session Started Locally**
-
-**Session ID**: {new_session_id}
-**Status**: Session active, n8n logging delayed/offline
-**Timeout**: {e}
-
-**Core functionality available**: All search and database operations working.
-**Note**: Session will be logged when n8n becomes responsive.
-        """
+        logger.error(f"FastAPI timeout: {e}")
+        raise Exception(f"FastAPI timeout - is the service running?")
         
     except httpx.ConnectError as e:
-        logger.warning(f"Cannot connect to n8n (service may be starting): {e}")
-        
-        # FIXED: Graceful fallback
-        current_session_id = new_session_id
-        session_start_time = datetime.now()
-        
-        return f"""
-⚠️ **Session Started in Offline Mode**
-
-**Session ID**: {new_session_id}
-**Status**: Local session only, n8n service unreachable
-**Connection**: {e}
-
-**All core tools available**: vector_search, database_query, document_search, knowledge_graph_search
-**n8n Status**: Will retry logging when service becomes available
-        """
+        logger.error(f"Cannot connect to FastAPI: {e}")
+        raise Exception(f"Cannot connect to FastAPI at {FASTAPI_URL}")
         
     except Exception as e:
-        logger.error(f"Unexpected session start error: {e}")
-        
-        # FIXED: Always provide functionality
-        current_session_id = new_session_id
-        session_start_time = datetime.now()
-        
-        return f"""
-⚠️ **Session Started with Error Recovery**
-
-**Session ID**: {new_session_id}
-**Error**: {str(e)[:200]}...
-**Status**: Core functionality preserved
-
-**Available**: All search and database operations
-**Recommendation**: Check n8n container status: `docker ps | grep fk2_n8n`
-        """
+        logger.error(f"Session start error: {e}")
+        raise Exception(f"Failed to start session: {str(e)}")
 
 @mcp.tool()
 async def end_session(reason: str = "session_complete") -> str:
@@ -682,18 +621,18 @@ async def end_session(reason: str = "session_complete") -> str:
                 "summary_generated": True
             }), current_session_id)
         
-        # Send end session to n8n
+        # Send end session to FastAPI
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
             session_data = {
                 "session_id": current_session_id,
-                "action_type": "session_end",
                 "reason": reason,
+                "summary": session_summary[:500],  # Truncated for API
+                "timestamp": datetime.now().isoformat(),
                 "user_id": "bitcain",
                 "agent_type": "claude-desktop",
-                "project": "finderskeepers-v2",
-                "summary": session_summary[:500]  # Truncated for webhook
+                "project": "finderskeepers-v2"
             }
-            await client.post(SESSION_WEBHOOK, json=session_data)
+            await client.post(SESSION_END_WEBHOOK, json=session_data)
         
         ended_session = current_session_id
         current_session_id = None
@@ -863,43 +802,44 @@ async def get_session_status() -> str:
 
 @mcp.tool()
 async def test_webhooks() -> str:
-    """Test n8n webhook connectivity and database access with CORRECT WEBHOOK ENDPOINTS"""
+    """Test FastAPI direct integration and database access"""
     results = {
-        "session_webhook": "❌ Not tested",
-        "action_conversation_webhook": "❌ Not tested", 
+        "session_start_endpoint": "❌ Not tested",
+        "action_conversation_endpoint": "❌ Not tested", 
+        "session_end_endpoint": "❌ Not tested",
         "database": "❌ Not tested",
         "full_pipeline": "❌ Not tested",
         "overall_status": "❌ Failed"
     }
     
-    # Test session webhook (session-logger) - CORRECT ENDPOINT
+    # Test session start endpoint
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
             test_data = {
                 "session_id": "test_session_health_check",
-                "action_type": "session_start",
+                "agent_type": "claude-desktop",
                 "user_id": "bitcain",
                 "project": "finderskeepers-v2",
                 "timestamp": datetime.now().isoformat(),
                 "source": "fk2_mcp_server_test"
             }
-            response = await client.post(SESSION_WEBHOOK, json=test_data)
+            response = await client.post(SESSION_START_WEBHOOK, json=test_data)
             if 200 <= response.status_code < 300:
-                results["session_webhook"] = f"✅ HTTP {response.status_code}"
+                results["session_start_endpoint"] = f"✅ HTTP {response.status_code}"
             else:
-                results["session_webhook"] = f"⚠️ HTTP {response.status_code}"
+                results["session_start_endpoint"] = f"⚠️ HTTP {response.status_code}"
                 
     except httpx.ConnectError as e:
-        results["session_webhook"] = f"❌ Connection failed: {str(e)[:30]}..."
+        results["session_start_endpoint"] = f"❌ Connection failed: {str(e)[:30]}..."
     except Exception as e:
-        results["session_webhook"] = f"❌ {str(e)[:50]}..."
+        results["session_start_endpoint"] = f"❌ {str(e)[:50]}..."
     
-    # Test action-tracker webhook (CRITICAL for conversation logging) - CORRECT ENDPOINT
+    # Test action/conversation endpoint
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
             test_data = {
                 "session_id": "test_session_health_check",
-                "action_type": "conversation_message",  # CRITICAL: This triggers the full pipeline
+                "action_type": "conversation_message",
                 "description": "test: Pipeline validation message",
                 "details": {
                     "message_type": "test_message",
@@ -917,26 +857,43 @@ async def test_webhooks() -> str:
             }
             response = await client.post(ACTION_WEBHOOK, json=test_data)
             if 200 <= response.status_code < 300:
-                results["action_conversation_webhook"] = f"✅ HTTP {response.status_code} - PIPELINE TRIGGERED"
+                results["action_conversation_endpoint"] = f"✅ HTTP {response.status_code} - DIRECT API SUCCESS"
             else:
-                results["action_conversation_webhook"] = f"❌ CRITICAL: HTTP {response.status_code} - PIPELINE BROKEN"
+                results["action_conversation_endpoint"] = f"❌ HTTP {response.status_code}"
                 
     except httpx.ConnectError as e:
-        results["action_conversation_webhook"] = f"❌ CRITICAL: n8n container unreachable - {str(e)[:30]}..."
+        results["action_conversation_endpoint"] = f"❌ FastAPI unreachable - {str(e)[:30]}..."
     except Exception as e:
-        results["action_conversation_webhook"] = f"❌ CRITICAL: {str(e)[:50]}..."
+        results["action_conversation_endpoint"] = f"❌ {str(e)[:50]}..."
     
-    # Test database connectivity and document count
+    # Test session end endpoint
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            test_data = {
+                "session_id": "test_session_health_check",
+                "reason": "test_complete",
+                "summary": "Health check test session",
+                "timestamp": datetime.now().isoformat()
+            }
+            response = await client.post(SESSION_END_WEBHOOK, json=test_data)
+            if 200 <= response.status_code < 300:
+                results["session_end_endpoint"] = f"✅ HTTP {response.status_code}"
+            else:
+                results["session_end_endpoint"] = f"⚠️ HTTP {response.status_code}"
+                
+    except Exception as e:
+        results["session_end_endpoint"] = f"❌ {str(e)[:50]}..."
+    
+    # Test database connectivity
     try:
         count = await safe_database_query("SELECT COUNT(*) FROM documents;")
         results["database"] = f"✅ {count:,} documents ready for search"
     except Exception as e:
         results["database"] = f"❌ {str(e)[:50]}..."
     
-    # Test full pipeline by checking if test data gets processed
+    # Test full pipeline by checking if test data gets stored
     try:
-        # Wait a moment for webhook processing
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)  # Give FastAPI time to process
         
         # Check if our test conversation message was stored
         test_check = await safe_database_query("""
@@ -946,55 +903,58 @@ async def test_webhooks() -> str:
         """)
         
         if test_check and test_check > 0:
-            results["full_pipeline"] = f"✅ End-to-end pipeline working - {test_check} test messages processed"
+            results["full_pipeline"] = f"✅ End-to-end pipeline working - {test_check} test messages in DB"
         else:
-            results["full_pipeline"] = "⚠️ No test messages found in database - pipeline may have delays"
+            results["full_pipeline"] = "⚠️ Test messages not found - check database inserts"
             
     except Exception as e:
         results["full_pipeline"] = f"❌ Pipeline validation failed: {str(e)[:50]}..."
     
     # Overall status assessment
-    critical_working = "✅" in results["action_conversation_webhook"] and "✅" in results["database"]
+    critical_working = "✅" in results["action_conversation_endpoint"] and "✅" in results["database"]
     if critical_working and "✅" in results["full_pipeline"]:
-        results["overall_status"] = "🚀 FINDERSKEEPERS V2 FULLY OPERATIONAL!"
+        results["overall_status"] = "🚀 FINDERSKEEPERS V2 FULLY OPERATIONAL - DIRECT API!"
     elif critical_working:
-        results["overall_status"] = "⚡ Core functional - conversation logging active"
+        results["overall_status"] = "⚡ Core functional - FastAPI direct integration active"
     elif "✅" in results["database"]:
-        results["overall_status"] = "⚠️ Database working, webhooks need attention"
+        results["overall_status"] = "⚠️ Database working, FastAPI endpoints need attention"
     else:
         results["overall_status"] = "❌ CRITICAL: System needs immediate attention"
     
     return f"""
-🔧 **FINDERSKEEPERS V2 FULL SYSTEM HEALTH CHECK - CORRECTED ENDPOINTS**
+🔧 **FINDERSKEEPERS V2 SYSTEM HEALTH CHECK - DIRECT FASTAPI INTEGRATION**
 
-**🎯 CRITICAL CONVERSATION PIPELINE:**
-**Action/Conversation Webhook**: {results["action_conversation_webhook"]}
+**🎯 CRITICAL ENDPOINTS (FastAPI Direct):**
+**Session Start**: {results["session_start_endpoint"]}
+**Action/Conversation**: {results["action_conversation_endpoint"]}
+**Session End**: {results["session_end_endpoint"]}
 
 **📡 OTHER COMPONENTS:**
-**Session Webhook**: {results["session_webhook"]}
 **Database**: {results["database"]}
 **Full Pipeline Test**: {results["full_pipeline"]}
 
 **🏆 OVERALL STATUS**: {results["overall_status"]}
 
-**🔗 CORRECT WEBHOOK URLs:**
-- **Session**: {SESSION_WEBHOOK}
+**🔗 DIRECT FASTAPI ENDPOINTS:**
+- **Session Start**: {SESSION_START_WEBHOOK}
 - **Action/Conversation**: {ACTION_WEBHOOK}
+- **Session End**: {SESSION_END_WEBHOOK}
 
-**✅ ACTIVE n8n WORKFLOWS:**
-- FK2-MCP Enhanced Agent Session Logger (session-logger)
-- FK2-MCP Agent Action Tracker (action-tracker) ← HANDLES CONVERSATIONS
-- FK2 - Auto Entity Extraction (PostgreSQL trigger)
+**✅ n8n BYPASSED - DIRECT API BENEFITS:**
+- No silent failures
+- Immediate error feedback
+- Direct database writes
+- Simpler debugging
+- Better performance
 
 **🚀 DOCKER CONTAINERS TO CHECK:**
 ```bash
-docker ps | grep fk2_n8n        # n8n workflows
+docker ps | grep fk2_fastapi    # FastAPI backend
 docker ps | grep fk2_postgres   # Database
-docker ps | grep fk2_fastapi    # Backend API
-docker logs fk2_n8n --tail 20   # Check n8n logs
+docker logs fk2_fastapi --tail 20   # Check API logs
 ```
 
-**⚡ AI GOD STATUS**: {'🏆 ACTIVATED!' if critical_working else '❌ NEEDS REPAIR!'}
+**⚡ DIRECT INTEGRATION STATUS**: {'🏆 ACTIVATED!' if critical_working else '❌ NEEDS REPAIR!'}
     """
 
 # =============================================================================

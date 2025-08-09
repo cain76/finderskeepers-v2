@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Typography, Box, IconButton } from '@mui/material';
 import { LightMode, DarkMode } from '@mui/icons-material';
@@ -10,7 +10,8 @@ import AgentSessions from './pages/AgentSessions';
 import Documents from './pages/Documents';
 import VectorSearch from './pages/VectorSearch';
 import KnowledgeGraph from './pages/KnowledgeGraph';
-import SystemMonitoring from './pages/SystemMonitoring';
+// SystemMonitoring merged into AdminControlCenter
+import AdminControlCenter from './pages/AdminControlCenter';
 import Chat from './pages/Chat';
 
 // Settings component with theme controls
@@ -204,7 +205,8 @@ function App() {
                 { to: '/search', label: '🔍 Vector Search' },
                 { to: '/graph', label: '🕸️ Knowledge Graph' },
                 { to: '/chat', label: '💬 AI Chat' },
-                { to: '/monitoring', label: '📈 System Monitoring' },
+                // Monitoring merged into Admin Control Center
+                { to: '/admin', label: '🛠️ Admin Control Center' },
                 { to: '/settings', label: '⚙️ Settings' },
               ].map((item) => (
                 <Box component="li" key={item.to} sx={{ mb: 1 }}>
@@ -234,7 +236,9 @@ function App() {
               <Route path="/search" element={<VectorSearch />} />
               <Route path="/graph" element={<KnowledgeGraph />} />
               <Route path="/chat" element={<Chat />} />
-              <Route path="/monitoring" element={<SystemMonitoring />} />
+              {/* Monitoring features now in Admin Control Center */}
+              <Route path="/monitoring" element={<Navigate to="/admin" replace />} />
+              <Route path="/admin" element={<AdminControlCenter />} />
               <Route path="/settings" element={<Settings darkMode={darkMode} toggleTheme={toggleTheme} />} />
             </Routes>
           </Box>

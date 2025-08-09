@@ -584,7 +584,6 @@ export default function Dashboard() {
                   { name: 'Qdrant Vector DB', port: '6333' },
                   { name: 'Redis Cache', port: '6379' },
                   { name: 'Ollama LLM', port: '11434' },
-                  { name: 'n8n Workflows', port: '5678' },
                   { name: 'MCP Integration', port: '3002' },
                 ].map((service) => {
                   const serviceStatus = getServiceStatus(service.name);

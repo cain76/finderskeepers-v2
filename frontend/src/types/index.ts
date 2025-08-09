@@ -140,7 +140,6 @@ export interface SystemHealth {
     qdrant: ServiceStatus;
     redis: ServiceStatus;
     ollama: ServiceStatus;
-    n8n: ServiceStatus;
   };
   local_llm?: {
     enabled: boolean;

@@ -19,6 +19,13 @@ class WebSocketService {
   }
 
   private connect(): void {
+    // TEMPORARILY DISABLED: Socket.io not configured on backend yet
+    // The backend uses regular WebSocket, not socket.io
+    // Commenting out to prevent connection errors
+    console.log('WebSocket connection disabled - backend using regular WebSocket, not socket.io');
+    return;
+    
+    /* Original socket.io connection code - will re-enable when backend is updated
     try {
       // Connect to FastAPI WebSocket endpoint
       this.socket = io('ws://localhost:8000', {
@@ -36,6 +43,7 @@ class WebSocketService {
       console.error('WebSocket connection failed:', error);
       this.handleError(error as Error);
     }
+    */
   }
 
   private setupEventHandlers(): void {

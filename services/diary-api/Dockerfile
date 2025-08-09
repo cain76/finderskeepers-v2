@@ -1,7 +1,7 @@
 # Use Python 3.12 official image
 FROM python:3.12-slim
 
-# Install system dependencies including OpenGL for EasyOCR
+# Install system dependencies including OpenGL for EasyOCR and PostgreSQL client
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -34,6 +35,9 @@ RUN pip install \
 # Copy application code
 COPY . /app
 
+# Make entrypoint script executable
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Set environment variables for GPU access
 ENV CUDA_VISIBLE_DEVICES=0
 ENV NVIDIA_VISIBLE_DEVICES=0
@@ -41,5 +45,5 @@ ENV NVIDIA_VISIBLE_DEVICES=0
 # Expose port
 EXPOSE 80
 
-# Run with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+# Use entrypoint script for initialization
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

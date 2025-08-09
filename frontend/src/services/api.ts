@@ -295,11 +295,6 @@ class ApiService {
               status: healthResponse.services?.ollama || 'unknown',
               response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_ollama', containerDetails) : undefined,
               uptime_percentage: containerDetails ? this.calculateUptime('fk2_ollama', containerDetails) : undefined
-            },
-            n8n: {
-              status: healthResponse.services?.n8n || 'unknown',
-              response_time_ms: containerDetails ? this.getServiceResponseTime('fk2_n8n', containerDetails) : undefined,
-              uptime_percentage: containerDetails ? this.calculateUptime('fk2_n8n', containerDetails) : undefined
             }
           },
           local_llm: healthResponse.local_llm,

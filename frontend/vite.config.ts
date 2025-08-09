@@ -20,22 +20,22 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://fastapi:80',  // Using Docker service name
         changeOrigin: true,
         secure: false,
       },
       '/health': {
-        target: 'http://localhost:8000',
+        target: 'http://fastapi:80',  // Using Docker service name
         changeOrigin: true,
         secure: false,
       },
       '/docs': {
-        target: 'http://localhost:8000',
+        target: 'http://fastapi:80',  // Using Docker service name
         changeOrigin: true,
         secure: false,
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://fastapi:80',  // Using Docker service name
         ws: true,
         changeOrigin: true,
       },

@@ -1,0 +1,1603 @@
+// FindersKeepers v2 - System Monitoring Page
+
+import React from 'react';
+import {
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  LinearProgress,
+  Chip,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Alert,
+  CircularProgress,
+  Fade,
+} from '@mui/material';
+import {
+  CheckCircle as HealthyIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+  Refresh as RefreshIcon,
+  MonitorHeart as MonitorIcon,
+  Psychology as OllamaIcon,
+  Psychology as SessionIcon,
+  Sync as SyncIcon,
+  Build as AdminIcon,
+  PlayArrow as ProcessIcon,
+  CleaningServices as CleanIcon,
+  Analytics as StatsIcon,
+} from '@mui/icons-material';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+} from 'recharts';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { apiService } from '@/services/api';
+import type { SystemHealth } from '@/types';
+
+interface ServiceStatus {
+  name: string;
+  status: 'up' | 'down' | 'degraded' | 'checking';
+  uptime_percentage?: number;
+  response_time_ms?: number;
+  last_check?: string;
+  details?: Record<string, any>;
+}
+
+interface PerformanceMetrics {
+  timestamp: string;
+  cpu_usage: number;
+  memory_usage: number;
+  response_time: number;
+  active_connections: number;
+}
+
+interface LoadingStates {
+  initial: boolean;
+  health: boolean;
+  services: boolean;
+  performance: boolean;
+  manual: boolean;
+  admin: boolean;
+  bulkProcessing: boolean;
+  queueMaintenance: boolean;
+  mcpSession: boolean;
+  mcpResume: boolean;
+  mcpHistory: boolean;
+  vectorOptimize: boolean;
+  vectorReindex: boolean;
+  vectorCleanup: boolean;
+  graphAnalyze: boolean;
+  graphCommunity: boolean;
+  graphRelations: boolean;
+  diagnostics: boolean;
+  gpuCheck: boolean;
+  memoryCheck: boolean;
+}
+
+interface ProcessingStats {
+  total_documents: number;
+  unprocessed_embeddings: number;
+  processed_embeddings: number;
+  entities_extracted: number;
+  relationships_created: number;
+  total_queue: number;
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  project_breakdown: Array<{
+    project: string;
+    total: number;
+    unprocessed: number;
+  }>;
+  critical_issues: {
+    unprocessed_embeddings: number;
+    queue_backlog: number;
+    failed_jobs: number;
+  };
+}
+
+interface BulkProcessingJob {
+  success: boolean;
+  job_id: string;
+  message: string;
+  total_documents: number;
+  total_batches: number;
+  batch_size: number;
+  estimated_time_minutes: number;
+  status: string;
+}
+
+interface EnhancementResult {
+  success: boolean;
+  action: string;
+  message: string;
+  details?: any;
+}
+
+export default function SystemMonitoring() {
+  const [systemHealth, setSystemHealth] = React.useState<SystemHealth | null>(null);
+  const [services, setServices] = React.useState<ServiceStatus[]>([]);
+  const [performanceData, setPerformanceData] = React.useState<PerformanceMetrics[]>([]);
+  const [loading, setLoading] = React.useState<LoadingStates>({
+    initial: true,
+    health: false,
+    services: false,
+    performance: false,
+    manual: false,
+    admin: false,
+    bulkProcessing: false,
+    queueMaintenance: false,
+    mcpSession: false,
+    mcpResume: false,
+    mcpHistory: false,
+    vectorOptimize: false,
+    vectorReindex: false,
+    vectorCleanup: false,
+    graphAnalyze: false,
+    graphCommunity: false,
+    graphRelations: false,
+    diagnostics: false,
+    gpuCheck: false,
+    memoryCheck: false,
+  });
+  const [lastUpdate, setLastUpdate] = React.useState<string>('');
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  
+  // Admin functionality state
+  const [processingStats, setProcessingStats] = React.useState<ProcessingStats | null>(null);
+  const [bulkProcessingJob, setBulkProcessingJob] = React.useState<BulkProcessingJob | null>(null);
+  const [showAdminPanel, setShowAdminPanel] = React.useState(false);
+  const [enhancementResults, setEnhancementResults] = React.useState<EnhancementResult | null>(null);
+
+  const { subscribe } = useWebSocket();
+
+  // Real-time health updates
+  React.useEffect(() => {
+    const unsubscribe = subscribe('health_update', (data: SystemHealth) => {
+      setSystemHealth(data);
+      setLastUpdate(new Date().toLocaleTimeString());
+    });
+
+    return unsubscribe;
+  }, [subscribe]);
+
+  // Update specific loading state
+  const updateLoading = (key: keyof LoadingStates, value: boolean) => {
+    setLoading(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Load system health with caching and timeout
+  const loadSystemHealth = async (isManual = false) => {
+    try {
+      if (isManual) {
+        setIsRefreshing(true);
+        updateLoading('manual', true);
+      } else {
+        updateLoading('health', true);
+      }
+      
+      // Set a timeout for the API call
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      try {
+        const healthResponse = await Promise.race([
+          apiService.getSystemHealth(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Health check timeout')), 10000)
+          )
+        ]) as any;
+        
+        clearTimeout(timeoutId);
+        
+        if (healthResponse.success && healthResponse.data) {
+          setSystemHealth(healthResponse.data);
+          
+          // Transform services data asynchronously  
+          setTimeout(() => {
+            const servicesData: ServiceStatus[] = [];
+            if (healthResponse.data.services) {
+              Object.entries(healthResponse.data.services).forEach(([name, serviceInfo]: [string, any]) => {
+                servicesData.push({
+                  name: name.toUpperCase(),
+                  status: serviceInfo.status || serviceInfo || 'unknown',
+                  uptime_percentage: serviceInfo.uptime_percentage,
+                  response_time_ms: serviceInfo.response_time_ms,
+                  last_check: serviceInfo.last_check,
+                  details: serviceInfo.details,
+                });
+              });
+            }
+            setServices(servicesData);
+          }, 0);
+        }
+        
+        setLastUpdate(new Date().toLocaleTimeString());
+      } catch (timeoutError) {
+        clearTimeout(timeoutId);
+        console.error('Health check timeout or failed:', timeoutError);
+        // Set basic fallback data
+        setSystemHealth({
+          status: 'unknown',
+          services: {},
+          last_check: new Date().toISOString()
+        } as SystemHealth);
+      }
+    } catch (error) {
+      console.error('Failed to load system health:', error);
+    } finally {
+      updateLoading('health', false);
+      if (isManual) {
+        updateLoading('manual', false);
+        setIsRefreshing(false);
+      }
+    }
+  };
+
+  // Load performance data separately
+  const loadPerformanceData = async () => {
+    try {
+      updateLoading('performance', true);
+      
+      // Generate sample performance data
+      const now = new Date();
+      const sampleData = Array.from({ length: 24 }, (_, i) => ({
+        timestamp: new Date(now.getTime() - (23 - i) * 60 * 60 * 1000).toLocaleTimeString(),
+        cpu_usage: Math.random() * 100,
+        memory_usage: Math.random() * 100,
+        response_time: 100 + Math.random() * 200,
+        active_connections: Math.floor(Math.random() * 50),
+      }));
+      setPerformanceData(sampleData);
+    } catch (error) {
+      console.error('Failed to load performance data:', error);
+    } finally {
+      updateLoading('performance', false);
+    }
+  };
+
+  // Load processing statistics
+  const loadProcessingStats = async () => {
+    try {
+      updateLoading('admin', true);
+      console.log('🔍 Loading processing stats...');
+      
+      const response = await fetch('/api/admin/processing-stats');
+      console.log('📊 Processing stats response:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📊 Processing stats data:', data);
+        if (data.success) {
+          setProcessingStats(data);
+          console.log('✅ Processing stats loaded successfully');
+        } else {
+          console.error('❌ Processing stats failed:', data.message);
+        }
+      } else {
+        console.error('❌ Processing stats HTTP error:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load processing stats:', error);
+    } finally {
+      updateLoading('admin', false);
+    }
+  };
+
+  // Start bulk embedding process
+  const startBulkEmbedding = async (batchSize = 100) => {
+    try {
+      console.log(`🚀 Starting bulk embedding process with batch size: ${batchSize}`);
+      updateLoading('bulkProcessing', true);
+      setBulkProcessingJob(null); // Clear previous job info
+      
+      const requestBody = {
+        batch_size: batchSize,
+        priority: 'normal',
+        auto_retry: true,
+        max_retries: 3
+      };
+      
+      console.log('📤 Bulk embedding request:', requestBody);
+      
+      const response = await fetch('/api/admin/bulk-embedding', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      console.log('📥 Bulk embedding response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📥 Bulk embedding response data:', data);
+        
+        if (data.success) {
+          setBulkProcessingJob(data);
+          console.log('✅ Bulk embedding job started successfully:', data.job_id);
+          
+          // Show success message and refresh stats after a delay
+          setTimeout(() => {
+            console.log('🔄 Refreshing processing stats after job start...');
+            loadProcessingStats();
+          }, 2000);
+        } else {
+          console.error('❌ Bulk embedding job failed:', data.message);
+          setBulkProcessingJob({
+            success: false,
+            job_id: '',
+            message: data.message || 'Job failed to start',
+            total_documents: 0,
+            total_batches: 0,
+            batch_size: batchSize,
+            estimated_time_minutes: 0,
+            status: 'failed'
+          });
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Bulk embedding HTTP error:', response.status, errorText);
+        setBulkProcessingJob({
+          success: false,
+          job_id: '',
+          message: `HTTP Error ${response.status}: ${errorText}`,
+          total_documents: 0,
+          total_batches: 0,
+          batch_size: batchSize,
+          estimated_time_minutes: 0,
+          status: 'failed'
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Bulk embedding request failed:', error);
+      setBulkProcessingJob({
+        success: false,
+        job_id: '',
+        message: `Network error: ${error.message}`,
+        total_documents: 0,
+        total_batches: 0,
+        batch_size: batchSize,
+        estimated_time_minutes: 0,
+        status: 'failed'
+      });
+    } finally {
+      updateLoading('bulkProcessing', false);
+    }
+  };
+
+  // Queue maintenance operations
+  const performQueueMaintenance = async (operation: string) => {
+    try {
+      console.log(`🔧 Starting queue maintenance operation: ${operation}`);
+      updateLoading('queueMaintenance', true);
+      
+      const response = await fetch(`/api/admin/queue-maintenance?operation=${operation}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.log('🔧 Queue maintenance response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔧 Queue maintenance result:', data);
+        
+        // Refresh stats after maintenance
+        setTimeout(() => {
+          console.log('🔄 Refreshing stats after queue maintenance...');
+          loadProcessingStats();
+        }, 1000);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Queue maintenance HTTP error:', response.status, errorText);
+      }
+    } catch (error) {
+      console.error('❌ Queue maintenance failed:', error);
+    } finally {
+      updateLoading('queueMaintenance', false);
+    }
+  };
+
+  // MCP Session Testing
+  const testMcpSession = async () => {
+    try {
+      updateLoading('mcpSession', true);
+      const response = await fetch('/api/mcp/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          project: 'finderskeepers-v2',
+          user_id: 'bitcain',
+          test_mode: true
+        })
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'MCP Session Test',
+        message: data.message || 'Session test completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'MCP Session Test',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('mcpSession', false);
+    }
+  };
+
+  // Test MCP Resume
+  const testMcpResume = async () => {
+    try {
+      updateLoading('mcpResume', true);
+      const response = await fetch('/api/mcp/session/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'MCP Resume Test',
+        message: data.message || 'Resume test completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'MCP Resume Test',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('mcpResume', false);
+    }
+  };
+
+  // Query Session History
+  const querySessionHistory = async () => {
+    try {
+      updateLoading('mcpHistory', true);
+      const response = await fetch('/api/mcp/session/history');
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Session History Query',
+        message: data.message || 'History retrieved',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Session History Query',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('mcpHistory', false);
+    }
+  };
+
+  // Vector Database Functions
+  const optimizeVectorDatabase = async () => {
+    try {
+      updateLoading('vectorOptimize', true);
+      const response = await fetch('/api/admin/vector-optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Vector Database Optimization',
+        message: data.message || 'Optimization completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Vector Database Optimization',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('vectorOptimize', false);
+    }
+  };
+
+  const reindexVectorDatabase = async () => {
+    try {
+      updateLoading('vectorReindex', true);
+      const response = await fetch('/api/admin/vector-reindex', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Vector Database Reindex',
+        message: data.message || 'Reindex completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Vector Database Reindex',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('vectorReindex', false);
+    }
+  };
+
+  const cleanupOrphanedVectors = async () => {
+    try {
+      updateLoading('vectorCleanup', true);
+      const response = await fetch('/api/admin/vector-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Vector Cleanup',
+        message: data.message || 'Cleanup completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Vector Cleanup',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('vectorCleanup', false);
+    }
+  };
+
+  // Knowledge Graph Functions  
+  const analyzeGraphCentrality = async () => {
+    try {
+      updateLoading('graphAnalyze', true);
+      const response = await fetch('/api/admin/graph-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis_type: 'centrality' })
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Graph Centrality Analysis',
+        message: data.message || 'Analysis completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Graph Centrality Analysis', 
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('graphAnalyze', false);
+    }
+  };
+
+  const detectCommunities = async () => {
+    try {
+      updateLoading('graphCommunity', true);
+      const response = await fetch('/api/admin/graph-communities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Community Detection',
+        message: data.message || 'Detection completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Community Detection',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('graphCommunity', false);
+    }
+  };
+
+  const enhanceRelationships = async () => {
+    try {
+      updateLoading('graphRelations', true);
+      const response = await fetch('/api/admin/graph-enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Relationship Enhancement',
+        message: data.message || 'Enhancement completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Relationship Enhancement',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('graphRelations', false);
+    }
+  };
+
+  // System Diagnostics Functions
+  const runFullDiagnostics = async () => {
+    try {
+      updateLoading('diagnostics', true);
+      const response = await fetch('/api/admin/full-diagnostics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Full System Diagnostics',
+        message: data.message || 'Diagnostics completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Full System Diagnostics',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('diagnostics', false);
+    }
+  };
+
+  const checkGpuStatus = async () => {
+    try {
+      updateLoading('gpuCheck', true);
+      const response = await fetch('/api/admin/gpu-status');
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'RTX 2080ti GPU Status',
+        message: data.message || 'GPU check completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'RTX 2080ti GPU Status',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('gpuCheck', false);
+    }
+  };
+
+  const checkMemoryOptimization = async () => {
+    try {
+      updateLoading('memoryCheck', true);
+      const response = await fetch('/api/admin/memory-check');
+      
+      const data = await response.json();
+      setEnhancementResults({
+        success: response.ok,
+        action: 'Memory Optimization Check',
+        message: data.message || 'Memory check completed',
+        details: data
+      });
+    } catch (error: any) {
+      setEnhancementResults({
+        success: false,
+        action: 'Memory Optimization Check',
+        message: error.message,
+        details: null
+      });
+    } finally {
+      updateLoading('memoryCheck', false);
+    }
+  };
+
+  // Initial load with progressive enhancement
+  React.useEffect(() => {
+    const initialize = async () => {
+      updateLoading('initial', true);
+      
+      // Load health data first (faster)
+      await loadSystemHealth();
+      updateLoading('initial', false);
+      
+      // Load performance data in background
+      loadPerformanceData();
+    };
+    
+    initialize();
+  }, []);
+
+  // Auto-refresh system health (background updates)
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      // Only refresh health data, not the entire UI
+      loadSystemHealth(false);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Refresh performance data less frequently
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      loadPerformanceData();
+    }, 60000); // Every minute
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'up':
+      case 'healthy':
+        return <HealthyIcon color="success" />;
+      case 'degraded':
+      case 'warning':
+        return <WarningIcon color="warning" />;
+      case 'down':
+      case 'error':
+        return <ErrorIcon color="error" />;
+      default:
+        return <MonitorIcon color="action" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'up':
+      case 'healthy':
+        return 'success';
+      case 'degraded':
+      case 'warning':
+        return 'warning';
+      case 'down':
+      case 'error':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
+  const formatUptime = (percentage?: number) => {
+    return percentage ? `${percentage.toFixed(2)}%` : 'N/A';
+  };
+
+  const formatResponseTime = (ms?: number) => {
+    return ms ? `${ms.toFixed(0)}ms` : 'N/A';
+  };
+
+  const getOverallHealthStatus = () => {
+    if (!systemHealth) {
+      return { status: 'unknown', color: 'default' };
+    }
+    
+    if (systemHealth.status === 'healthy') {
+      return { status: 'All Systems Operational', color: 'success' };
+    } else {
+      return { status: 'Some Issues Detected', color: 'warning' };
+    }
+  };
+
+  const handleManualRefresh = () => {
+    Promise.all([
+      loadSystemHealth(true),
+      loadPerformanceData()
+    ]);
+  };
+
+  // Show initial loading only on first load
+  if (loading.initial) {
+    return (
+      <Box sx={{ width: '100%', mt: 2 }}>
+        <LinearProgress />
+        <Typography variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
+          Loading system health data...
+        </Typography>
+      </Box>
+    );
+  }
+
+  const overallHealth = getOverallHealthStatus();
+
+  return (
+    <Box sx={{ flexGrow: 1 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" component="h1">
+          System Monitoring & Admin
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            variant={showAdminPanel ? "contained" : "outlined"}
+            startIcon={<AdminIcon />}
+            onClick={() => {
+              setShowAdminPanel(!showAdminPanel);
+              if (!showAdminPanel && !processingStats) {
+                loadProcessingStats();
+              }
+            }}
+          >
+            Admin Panel
+          </Button>
+          <Fade in={loading.health}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SyncIcon fontSize="small" color="action" />
+              <Typography variant="body2" color="textSecondary">
+                Updating...
+              </Typography>
+            </Box>
+          </Fade>
+          <Typography variant="body2" color="textSecondary">
+            Last updated: {lastUpdate}
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={isRefreshing ? <CircularProgress size={16} /> : <RefreshIcon />}
+            onClick={handleManualRefresh}
+            disabled={loading.manual}
+          >
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Overall Status */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {getStatusIcon(systemHealth?.status || 'unknown')}
+              <Typography variant="h5">
+                {overallHealth.status}
+              </Typography>
+              <Chip
+                label={systemHealth?.status || 'unknown'}
+                color={overallHealth.color as any}
+                variant="filled"
+              />
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Admin Panel */}
+      {showAdminPanel && (
+        <Fade in={showAdminPanel}>
+          <Card sx={{ mb: 3, border: 2, borderColor: 'primary.main' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                <AdminIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="h5">
+                  Admin & Maintenance Panel
+                </Typography>
+                {loading.admin && <CircularProgress size={20} sx={{ ml: 2 }} />}
+              </Box>
+
+              {/* Critical Issues Alert */}
+              {processingStats?.critical_issues && (
+                <Alert 
+                  severity={
+                    processingStats.critical_issues.unprocessed_embeddings > 0 ? 'error' : 'info'
+                  } 
+                  sx={{ mb: 3 }}
+                >
+                  <Typography variant="h6" gutterBottom>
+                    ⚠️ Critical Issues Detected
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Typography variant="body2">
+                        <strong>{processingStats.critical_issues.unprocessed_embeddings}</strong> documents need embeddings
+                      </Typography>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Typography variant="body2">
+                        <strong>{processingStats.critical_issues.queue_backlog}</strong> items in queue backlog
+                      </Typography>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                      <Typography variant="body2">
+                        <strong>{processingStats.critical_issues.failed_jobs}</strong> failed processing jobs
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Alert>
+              )}
+
+              {/* Quick Actions */}
+              <Grid container spacing={3}>
+                {/* Document Processing Controls */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                      <ProcessIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Document Processing
+                    </Typography>
+                    
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="textSecondary" gutterBottom>
+                        Fix the 12,274 unprocessed documents
+                      </Typography>
+                      
+                      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          startIcon={loading.bulkProcessing ? <CircularProgress size={16} /> : <ProcessIcon />}
+                          onClick={() => startBulkEmbedding(100)}
+                          disabled={loading.bulkProcessing}
+                        >
+                          Start Bulk Embedding (100/batch)
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          startIcon={loading.bulkProcessing ? <CircularProgress size={16} /> : <ProcessIcon />}
+                          onClick={() => startBulkEmbedding(500)}
+                          disabled={loading.bulkProcessing}
+                        >
+                          Fast Mode (500/batch)
+                        </Button>
+                      </Box>
+
+                      {bulkProcessingJob && (
+                        <Alert 
+                          severity={bulkProcessingJob.success ? "success" : "error"} 
+                          sx={{ mt: 2 }}
+                        >
+                          <Typography variant="body2">
+                            <strong>{bulkProcessingJob.success ? 'Job Started:' : 'Job Failed:'}</strong> {bulkProcessingJob.message}
+                          </Typography>
+                          {bulkProcessingJob.success && (
+                            <Typography variant="caption" display="block">
+                              Job ID: {bulkProcessingJob.job_id} | 
+                              Documents: {bulkProcessingJob.total_documents} | 
+                              Estimated time: {bulkProcessingJob.estimated_time_minutes} minutes
+                            </Typography>
+                          )}
+                          {!bulkProcessingJob.success && (
+                            <Typography variant="caption" display="block" color="error">
+                              Error details: {bulkProcessingJob.message}
+                            </Typography>
+                          )}
+                        </Alert>
+                      )}
+
+                      {/* Debug Information */}
+                      <Box sx={{ mt: 2, p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
+                        <Typography variant="caption" color="textSecondary">
+                          Debug: Check browser console (F12) for detailed logs
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                {/* Queue Maintenance */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                      <CleanIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Queue Maintenance
+                    </Typography>
+                    
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      Clean up and manage processing queues
+                    </Typography>
+                    
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={loading.queueMaintenance ? <CircularProgress size={16} /> : <RefreshIcon />}
+                        onClick={() => performQueueMaintenance('retry_failed')}
+                        disabled={loading.queueMaintenance}
+                      >
+                        Retry Failed Items
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="warning"
+                        startIcon={loading.queueMaintenance ? <CircularProgress size={16} /> : <CleanIcon />}
+                        onClick={() => performQueueMaintenance('clear_completed')}
+                        disabled={loading.queueMaintenance}
+                      >
+                        Clear Completed (24h+)
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        startIcon={loading.queueMaintenance ? <CircularProgress size={16} /> : <CleanIcon />}
+                        onClick={() => performQueueMaintenance('clear_failed')}
+                        disabled={loading.queueMaintenance}
+                      >
+                        Clear Failed Items
+                      </Button>
+                    </Box>
+                  </Box>
+                </Grid>
+                
+                {/* Enhanced AI GOD MODE Session Controls */}
+                <Grid size={{ xs: 12 }}>
+                  <Card sx={{ mt: 3, border: 2, borderColor: 'secondary.main' }}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                        <SessionIcon color="secondary" sx={{ mr: 1 }} />
+                        <Typography variant="h5">
+                          AI GOD MODE Session Management
+                        </Typography>
+                        {loading.admin && <CircularProgress size={20} sx={{ ml: 2 }} />}
+                      </Box>
+
+                      <Alert severity="info" sx={{ mb: 3 }}>
+                        <Typography variant="h6" gutterBottom>
+                          🧠 AI GOD MODE Active - Enhanced Session Controls
+                        </Typography>
+                        <Typography variant="body2">
+                          Monitor and manage persistent AI memory sessions with advanced controls for bitcain.net
+                        </Typography>
+                      </Alert>
+
+                      <Grid container spacing={3}>
+                        {/* MCP Session Controls */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                              <ProcessIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              MCP Session Controls
+                            </Typography>
+                            
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                              Advanced session management for AI GOD MODE
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                              <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={loading.mcpSession ? <CircularProgress size={16} /> : <ProcessIcon />}
+                                onClick={() => testMcpSession()}
+                                disabled={loading.mcpSession}
+                              >
+                                Test MCP Session Creation
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="secondary"
+                                startIcon={loading.mcpResume ? <CircularProgress size={16} /> : <RefreshIcon />}
+                                onClick={() => testMcpResume()}
+                                disabled={loading.mcpResume}
+                              >
+                                Test Session Resume
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="info"
+                                startIcon={loading.mcpHistory ? <CircularProgress size={16} /> : <StatsIcon />}
+                                onClick={() => querySessionHistory()}
+                                disabled={loading.mcpHistory}
+                              >
+                                Query Session History
+                              </Button>
+                            </Box>
+                          </Box>
+                        </Grid>
+
+                        {/* Vector Database Management */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                              <CleanIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Vector Database Optimization
+                            </Typography>
+                            
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                              Advanced vector database maintenance for optimal performance
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={loading.vectorOptimize ? <CircularProgress size={16} /> : <RefreshIcon />}
+                                onClick={() => optimizeVectorDatabase()}
+                                disabled={loading.vectorOptimize}
+                              >
+                                Optimize Vector Collections
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="warning"
+                                startIcon={loading.vectorReindex ? <CircularProgress size={16} /> : <CleanIcon />}
+                                onClick={() => reindexVectorDatabase()}
+                                disabled={loading.vectorReindex}
+                              >
+                                Reindex Vector Database
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="error"
+                                startIcon={loading.vectorCleanup ? <CircularProgress size={16} /> : <CleanIcon />}
+                                onClick={() => cleanupOrphanedVectors()}
+                                disabled={loading.vectorCleanup}
+                              >
+                                Remove Orphaned Vectors
+                              </Button>
+                            </Box>
+                          </Box>
+                        </Grid>
+
+                        {/* Knowledge Graph Enhancement */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                              <StatsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Knowledge Graph Enhancement
+                            </Typography>
+                            
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                              Advanced Neo4j graph database operations
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={loading.graphAnalyze ? <CircularProgress size={16} /> : <ProcessIcon />}
+                                onClick={() => analyzeGraphCentrality()}
+                                disabled={loading.graphAnalyze}
+                              >
+                                Analyze Graph Centrality
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="info"
+                                startIcon={loading.graphCommunity ? <CircularProgress size={16} /> : <StatsIcon />}
+                                onClick={() => detectCommunities()}
+                                disabled={loading.graphCommunity}
+                              >
+                                Community Detection
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="secondary"
+                                startIcon={loading.graphRelations ? <CircularProgress size={16} /> : <RefreshIcon />}
+                                onClick={() => enhanceRelationships()}
+                                disabled={loading.graphRelations}
+                              >
+                                Enhance Relationships
+                              </Button>
+                            </Box>
+                          </Box>
+                        </Grid>
+
+                        {/* System Diagnostics */}
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                              <AdminIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              System Diagnostics
+                            </Typography>
+                            
+                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                              Advanced system health checks and diagnostics
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={loading.diagnostics ? <CircularProgress size={16} /> : <MonitorIcon />}
+                                onClick={() => runFullDiagnostics()}
+                                disabled={loading.diagnostics}
+                              >
+                                Full System Diagnostics
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="warning"
+                                startIcon={loading.gpuCheck ? <CircularProgress size={16} /> : <ProcessIcon />}
+                                onClick={() => checkGpuStatus()}
+                                disabled={loading.gpuCheck}
+                              >
+                                RTX 2080ti GPU Status
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="info"
+                                startIcon={loading.memoryCheck ? <CircularProgress size={16} /> : <StatsIcon />}
+                                onClick={() => checkMemoryOptimization()}
+                                disabled={loading.memoryCheck}
+                              >
+                                Memory Optimization
+                              </Button>
+                            </Box>
+                          </Box>
+                        </Grid>
+                      </Grid>
+
+                      {/* Results Display */}
+                      {enhancementResults && (
+                        <Alert 
+                          severity={enhancementResults.success ? "success" : "error"} 
+                          sx={{ mt: 3 }}
+                        >
+                          <Typography variant="body2">
+                            <strong>{enhancementResults.action}:</strong> {enhancementResults.message}
+                          </Typography>
+                          {enhancementResults.details && (
+                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                              Details: {JSON.stringify(enhancementResults.details, null, 2)}
+                            </Typography>
+                          )}
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+
+              {/* Processing Statistics */}
+              {processingStats && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    <StatsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                    Processing Statistics
+                  </Typography>
+                  
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Box sx={{ textAlign: 'center', p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="h4" color="primary">
+                          {processingStats.total_documents}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Total Documents
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Box sx={{ textAlign: 'center', p: 2, border: 1, borderColor: 'error.main', borderRadius: 1 }}>
+                        <Typography variant="h4" color="error">
+                          {processingStats.unprocessed_embeddings}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Need Embeddings
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Box sx={{ textAlign: 'center', p: 2, border: 1, borderColor: 'warning.main', borderRadius: 1 }}>
+                        <Typography variant="h4" color="warning.main">
+                          {processingStats.pending}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Queue Pending
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Box sx={{ textAlign: 'center', p: 2, border: 1, borderColor: 'success.main', borderRadius: 1 }}>
+                        <Typography variant="h4" color="success.main">
+                          {Math.round((processingStats.processed_embeddings / processingStats.total_documents) * 100)}%
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Completion Rate
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Fade>
+      )}
+
+      {/* Service Status Grid */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        {services.map((service) => (
+          <Grid size={{ xs: 12, sm: 6, md: 4 }} key={service.name}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  {getStatusIcon(service.status)}
+                  <Typography variant="h6" sx={{ ml: 1 }}>
+                    {service.name}
+                  </Typography>
+                </Box>
+                
+                <Chip
+                  label={service.status}
+                  color={getStatusColor(service.status) as any}
+                  size="small"
+                  sx={{ mb: 2 }}
+                />
+                
+                <Box sx={{ mt: 2 }}>
+                  {service.uptime_percentage !== undefined && (
+                    <Typography variant="body2" color="textSecondary">
+                      Uptime: {formatUptime(service.uptime_percentage)}
+                    </Typography>
+                  )}
+                  {service.response_time_ms !== undefined && (
+                    <Typography variant="body2" color="textSecondary">
+                      Response: {formatResponseTime(service.response_time_ms)}
+                    </Typography>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+        
+        {/* Loading state for services */}
+        {loading.services && (
+          <Grid size={{ xs: 12 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          </Grid>
+        )}
+      </Grid>
+
+      {/* Performance Charts */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  System Resource Usage (24h)
+                </Typography>
+                {loading.performance && (
+                  <CircularProgress size={20} />
+                )}
+              </Box>
+              <Box sx={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                  <AreaChart data={performanceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="timestamp" />
+                    <YAxis />
+                    <RechartsTooltip />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="cpu_usage" 
+                      stackId="1"
+                      stroke="#8884d8" 
+                      fill="#8884d8"
+                      name="CPU Usage (%)"
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="memory_usage" 
+                      stackId="1"
+                      stroke="#82ca9d" 
+                      fill="#82ca9d"
+                      name="Memory Usage (%)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  API Response Times (24h)
+                </Typography>
+                {loading.performance && (
+                  <CircularProgress size={20} />
+                )}
+              </Box>
+              <Box sx={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                  <LineChart data={performanceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="timestamp" />
+                    <YAxis />
+                    <RechartsTooltip />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="response_time" 
+                      stroke="#ff7c7c" 
+                      name="Response Time (ms)"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="active_connections" 
+                      stroke="#8884d8" 
+                      name="Active Connections"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* LLM Status */}
+      {systemHealth?.local_llm && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <OllamaIcon color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6">
+                Local LLM Status (Ollama)
+              </Typography>
+            </Box>
+            
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Typography variant="body2" color="textSecondary">
+                  Status
+                </Typography>
+                <Chip
+                  label={systemHealth.local_llm.enabled ? 'Enabled' : 'Disabled'}
+                  color={systemHealth.local_llm.enabled ? 'success' : 'default'}
+                  size="small"
+                />
+              </Grid>
+              
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Typography variant="body2" color="textSecondary">
+                  Health
+                </Typography>
+                <Chip
+                  label={systemHealth.local_llm.healthy ? 'Healthy' : 'Unhealthy'}
+                  color={systemHealth.local_llm.healthy ? 'success' : 'error'}
+                  size="small"
+                />
+              </Grid>
+              
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Typography variant="body2" color="textSecondary">
+                  Embedding Model
+                </Typography>
+                <Typography variant="body1">
+                  {systemHealth.local_llm.embedding_model}
+                </Typography>
+              </Grid>
+              
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Typography variant="body2" color="textSecondary">
+                  Chat Model
+                </Typography>
+                <Typography variant="body1">
+                  {systemHealth.local_llm.chat_model}
+                </Typography>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detailed Service Information */}
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Detailed Service Status
+          </Typography>
+          
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Service</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Uptime</TableCell>
+                  <TableCell>Response Time</TableCell>
+                  <TableCell>Last Check</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {services.map((service) => (
+                  <TableRow key={service.name} hover>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {getStatusIcon(service.status)}
+                        <Typography sx={{ ml: 1 }}>
+                          {service.name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={service.status}
+                        color={getStatusColor(service.status) as any}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{formatUptime(service.uptime_percentage)}</TableCell>
+                    <TableCell>{formatResponseTime(service.response_time_ms)}</TableCell>
+                    <TableCell>
+                      {service.last_check ? new Date(service.last_check).toLocaleString() : 'Never'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {services.length === 0 && !loading.services && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              No detailed service information available.
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}

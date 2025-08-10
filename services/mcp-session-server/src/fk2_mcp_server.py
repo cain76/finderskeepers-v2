@@ -263,7 +263,7 @@ async def capture_conversation_message(message_type: str, content: str, metadata
         payload = {
             "session_id": current_session_id,
             "action_type": "conversation_message",
-            "description": f"{message_type}: {content[:200]}...",
+            "description": f"{message_type}: Full conversation logged",
             "details": {
                 "message_type": message_type,
                 "content": content,
@@ -323,7 +323,7 @@ async def log_action_enhanced(action_type: str, description: str, details: Dict)
         
     try:
         # Capture as conversation for full context
-        await capture_conversation_message("tool_execution", f"User executed {action_type}: {description}")
+        await capture_conversation_message("tool_execution", f"User executed {action_type}: {description} | Details: {json.dumps(details, default=str)}")
         
         # Enhanced action data with AI insights
         action_data = {

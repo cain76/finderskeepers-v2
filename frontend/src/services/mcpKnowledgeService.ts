@@ -95,6 +95,46 @@ class McpKnowledgeService {
       throw new Error('TODO: Implement /api/knowledge/entities/{entityId}/relationships endpoint in FastAPI backend');
     }
   }
+
+  // Alias for search - maintains compatibility if components use searchDocuments
+  async searchDocuments(query: McpSearchQuery): Promise<McpSearchResponse> {
+    return this.search(query);
+  }
+
+  async getCollections(): Promise<string[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/collections`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      return data.collections || ['fk2_documents'];
+    } catch (error) {
+      console.error('Failed to get collections:', error);
+      // Return default collection if endpoint doesn't exist
+      return ['fk2_documents'];
+    }
+  }
+
+  async getCollectionStats(collection?: string): Promise<any> {
+    try {
+      const collectionName = collection || 'fk2_documents';
+      const response = await fetch(`${this.baseUrl}/api/collections/${collectionName}/stats`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get collection stats:', error);
+      // Return default stats if endpoint doesn't exist
+      return {
+        collection: collection || 'fk2_documents',
+        documents: 0,
+        vectors: 0,
+        indexed: false
+      };
+    }
+  }
 }
 
 // Export singleton instance

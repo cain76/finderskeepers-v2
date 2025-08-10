@@ -24,6 +24,7 @@ class DatabaseManager:
         self.neo4j_driver: Optional[AsyncGraphDatabase] = None
         self.redis_client: Optional[aioredis.Redis] = None
         self.qdrant_client: Optional[QdrantClient] = None
+        self._qdrant_lock = asyncio.Lock()  # Thread-safe Qdrant client access
         
         # Configuration from environment - use Docker service names
         self.postgres_config = {
@@ -74,19 +75,26 @@ class DatabaseManager:
             return False
     
     async def initialize_neo4j(self) -> bool:
-        """Initialize Neo4j connection"""
+        """Initialize Neo4j connection with connection pooling"""
         try:
-            logger.info("🔄 Initializing Neo4j connection...")
+            logger.info("🔄 Initializing Neo4j connection pool...")
             self.neo4j_driver = AsyncGraphDatabase.driver(
                 self.neo4j_config['uri'],
-                auth=(self.neo4j_config['username'], self.neo4j_config['password'])
+                auth=(self.neo4j_config['username'], self.neo4j_config['password']),
+                # Add connection pooling configuration
+                max_connection_lifetime=3600,  # 1 hour
+                max_connection_pool_size=50,   # Default is 100
+                connection_acquisition_timeout=60.0,  # 60 seconds
+                resolver=None,
+                trust=None,
+                database=None
             )
             
             # Test connection
             async with self.neo4j_driver.session() as session:
                 await session.run("RETURN 1")
                 
-            logger.info("✅ Neo4j connection initialized successfully")
+            logger.info("✅ Neo4j connection pool initialized successfully")
             return True
             
         except Exception as e:
@@ -94,17 +102,28 @@ class DatabaseManager:
             return False
     
     async def initialize_redis(self) -> bool:
-        """Initialize Redis connection"""
+        """Initialize Redis connection with connection pooling"""
         try:
-            logger.info("🔄 Initializing Redis connection...")
+            logger.info("🔄 Initializing Redis connection pool...")
+            # aioredis automatically handles connection pooling
             self.redis_client = aioredis.from_url(
-                f"redis://{self.redis_config['host']}:{self.redis_config['port']}/{self.redis_config['db']}"
+                f"redis://{self.redis_config['host']}:{self.redis_config['port']}/{self.redis_config['db']}",
+                # Add explicit pool configuration
+                max_connections=50,  # Maximum number of connections in the pool
+                decode_responses=True,  # Automatically decode responses to strings
+                socket_keepalive=True,  # Enable TCP keepalive
+                socket_keepalive_options={
+                    1: 1,  # TCP_KEEPIDLE
+                    2: 1,  # TCP_KEEPINTVL
+                    3: 5,  # TCP_KEEPCNT
+                },
+                health_check_interval=30  # Health check every 30 seconds
             )
             
             # Test connection
             await self.redis_client.ping()
             
-            logger.info("✅ Redis connection initialized successfully")
+            logger.info("✅ Redis connection pool initialized successfully")
             return True
             
         except Exception as e:
@@ -194,10 +213,18 @@ class DatabaseManager:
         return self.redis_client
     
     def get_qdrant_client(self):
-        """Get Qdrant client"""
+        """Get Qdrant client (singleton pattern for connection reuse)"""
         if not self.qdrant_client:
             raise RuntimeError("Qdrant client not initialized")
+        # Qdrant client is thread-safe and can be reused
         return self.qdrant_client
+    
+    async def get_qdrant_client_async(self):
+        """Get Qdrant client with async lock for thread-safety"""
+        async with self._qdrant_lock:
+            if not self.qdrant_client:
+                await self.initialize_qdrant()
+            return self.qdrant_client
     
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check on all databases"""

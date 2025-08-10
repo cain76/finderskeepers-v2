@@ -111,7 +111,7 @@ class ChatService:
     async def _search_vector_database(self, query: str) -> List[Dict[str, Any]]:
         """Search vector database for relevant documents"""
         try:
-            # This would integrate with the existing vector search endpoint
+            # Call the real vector search endpoint
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     "http://localhost:8000/api/search/vector",
@@ -119,16 +119,16 @@ class ChatService:
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    if data.get("success") and data.get("results"):
+                    if data.get("success") and data.get("data"):  # Changed from "results" to "data"
                         return [
                             {
                                 "type": "document",
-                                "id": result.get("document_id"),
-                                "title": result.get("metadata", {}).get("title", "Unknown"),
+                                "id": result.get("id"),
+                                "title": result.get("payload", {}).get("title", "Unknown"),
                                 "relevance": result.get("score", 0),
-                                "content": result.get("content", "")[:500] + "..." if len(result.get("content", "")) > 500 else result.get("content", "")
+                                "content": result.get("payload", {}).get("content", "")[:500]
                             }
-                            for result in data["results"]
+                            for result in data["data"]
                         ]
         except Exception as e:
             logger.warning(f"Vector search failed: {e}")
@@ -137,18 +137,26 @@ class ChatService:
     async def _query_knowledge_graph(self, query: str) -> List[Dict[str, Any]]:
         """Query knowledge graph for relevant entities and relationships"""
         try:
-            # This would integrate with Neo4j knowledge graph
-            # For now, return mock results
-            return [
-                {
-                    "type": "entity",
-                    "id": "entity_001",
-                    "name": "FindersKeepers v2",
-                    "type_name": "Project",
-                    "relevance": 0.9,
-                    "relationships": ["CONTAINS", "IMPLEMENTS", "USES"]
-                }
-            ]
+            # Call the real knowledge graph endpoint
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://localhost:8000/api/knowledge/search",
+                    json={"query": query, "limit": 5}
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and data.get("data"):
+                        return [
+                            {
+                                "type": "entity",
+                                "id": node.get("id", "unknown"),
+                                "name": node.get("name", node.get("title", "Unknown")),
+                                "type_name": node.get("_labels", ["Unknown"])[0] if node.get("_labels") else "Unknown",
+                                "relevance": node.get("_score", 0.5),
+                                "relationships": []
+                            }
+                            for node in data["data"]
+                        ]
         except Exception as e:
             logger.warning(f"Knowledge graph query failed: {e}")
         return []

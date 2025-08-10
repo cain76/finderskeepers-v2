@@ -17,6 +17,10 @@ import asyncio
 from uuid import uuid4
 from datetime import datetime, timezone
 
+# Add Qdrant client imports for real vector search
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue, SearchParams, PointStruct
+
 # Import API modules
 from app.api.v1.ingestion import ingestion_router
 from app.api.v1.diary import diary_router
@@ -24,6 +28,7 @@ from app.api.v1.entity_extraction import router as entity_router
 from app.api.mcp import router as mcp_router  # NEW: MCP direct integration
 from app.api.admin import router as admin_router  # NEW: Admin & maintenance endpoints
 from app.api.background_admin import router as background_admin_router  # NEW: Background processor control
+from app.api.knowledge import router as knowledge_router  # NEW: Knowledge graph endpoints
 from app.database.connection import db_manager
 from app.database.queries import StatsQueries, SessionQueries, DocumentQueries, ConversationQueries
 from app.api.chat_endpoints import ChatRequest, ChatResponse, process_chat_message
@@ -145,6 +150,7 @@ app.include_router(entity_router)
 app.include_router(mcp_router, prefix="/api/mcp")  # NEW: MCP direct integration bypassing n8n
 app.include_router(admin_router)  # NEW: Admin & maintenance endpoints for bitcain.net
 app.include_router(background_admin_router)  # NEW: Background processor control
+app.include_router(knowledge_router)  # NEW: Knowledge graph endpoints
 
 
 
@@ -368,142 +374,10 @@ async def generate_embeddings(request: EmbeddingRequest):
 # ========================================
 # KNOWLEDGE API - Graph Queries & Document Management
 # ========================================
+# REMOVED: Duplicate knowledge/query endpoint (now in app/api/knowledge.py)
+# Original function removed to avoid route conflict
 
-@app.post("/api/knowledge/query", tags=["Knowledge"])
-async def query_knowledge(query: KnowledgeQuery):
-    """Query the knowledge graph with natural language using real Neo4j data"""
-    try:
-        logger.info(f"Knowledge query: {query.question}")
-        
-        # Generate embeddings for the query using local Ollama
-        query_embeddings = await ollama_client.get_embeddings(query.question)
-        
-        # Initialize results
-        relationships = []
-        documents = []
-        
-        # Query Neo4j for actual relationships
-        if db_manager.neo4j_driver:
-            async with db_manager.neo4j_driver.session() as session:
-                # Find related entities based on the query
-                cypher_query = """
-                    MATCH (e1:Entity)-[r]->(e2:Entity)
-                    WHERE toLower(e1.name) CONTAINS toLower($query)
-                       OR toLower(e2.name) CONTAINS toLower($query)
-                       OR toLower(type(r)) CONTAINS toLower($query)
-                    RETURN e1.name as source, 
-                           type(r) as relationship, 
-                           e2.name as target,
-                           e1.type as source_type,
-                           e2.type as target_type,
-                           r.properties as properties
-                    LIMIT 50
-                """
-                
-                try:
-                    result = await session.run(cypher_query, query=query.question)
-                    records = await result.values()
-                    
-                    for record in records:
-                        relationships.append({
-                            "source": record[0],
-                            "relationship": record[1],
-                            "target": record[2],
-                            "source_type": record[3],
-                            "target_type": record[4],
-                            "properties": json.loads(record[5]) if record[5] else {}
-                        })
-                except Exception as neo4j_error:
-                    logger.warning(f"Neo4j query failed: {neo4j_error}")
-                
-                # Find documents containing the query entities
-                doc_cypher = """
-                    MATCH (d:Document)-[:CONTAINS]->(e:Entity)
-                    WHERE toLower(e.name) CONTAINS toLower($query)
-                    RETURN DISTINCT d.title as document, 
-                           d.project as project,
-                           collect(e.name) as entities
-                    LIMIT 20
-                """
-                
-                try:
-                    doc_result = await session.run(doc_cypher, query=query.question)
-                    doc_records = await doc_result.values()
-                    
-                    for record in doc_records:
-                        documents.append({
-                            "document": record[0],
-                            "project": record[1],
-                            "entities": record[2]
-                        })
-                except Exception as doc_error:
-                    logger.warning(f"Document query failed: {doc_error}")
-        else:
-            logger.warning("Neo4j driver not available - using PostgreSQL fallback")
-            
-            # Fallback to PostgreSQL knowledge_entities table
-            async with db_manager.get_postgres_connection() as conn:
-                entities = await conn.fetch("""
-                    SELECT DISTINCT 
-                        ke.entity_name,
-                        ke.entity_type,
-                        d.title as document_title,
-                        d.project,
-                        ke.metadata
-                    FROM knowledge_entities ke
-                    JOIN documents d ON ke.source_doc_id = d.id
-                    WHERE LOWER(ke.entity_name) LIKE LOWER($1)
-                    LIMIT 20
-                """, f"%{query.question}%")
-                
-                for entity in entities:
-                    documents.append({
-                        "document": entity['document_title'],
-                        "project": entity['project'],
-                        "entities": [entity['entity_name']]
-                    })
-        
-        # Build response based on actual data
-        has_data = len(relationships) > 0 or len(documents) > 0
-        
-        if has_data:
-            answer = f"Found {len(relationships)} relationships and {len(documents)} related documents for '{query.question}'"
-        else:
-            # Use Ollama to generate a helpful response even if no data found
-            analysis_prompt = f"""
-            The user asked about: {query.question}
-            Project context: {query.project or "general"}
-            
-            No specific data was found in the knowledge graph.
-            Provide a helpful response suggesting what information might be available or how to find it.
-            Keep it brief and constructive.
-            """
-            
-            answer = await ollama_client.generate_text(analysis_prompt, max_tokens=256)
-            if not answer:
-                answer = f"No specific relationships found for '{query.question}'. Try running entity extraction first or search for broader terms."
-        
-        response = {
-            "answer": answer,
-            "relationships": relationships[:20],  # Limit to top 20
-            "documents": documents[:10],  # Limit to top 10
-            "sources": [
-                {
-                    "type": "neo4j_graph" if db_manager.neo4j_driver else "postgres_fallback",
-                    "id": f"query_{query.question[:20]}",
-                    "relevance": 1.0
-                }
-            ],
-            "context": query.project or "general",
-            "confidence": 0.9 if has_data else 0.3,
-            "embeddings_generated": len(query_embeddings) > 0,
-            "data_source": "real" if has_data else "generated"
-        }
-        
-        return response
-    except Exception as e:
-        logger.error(f"Knowledge query failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# ========================================
 
 @app.post("/api/docs/ingest", tags=["Knowledge"])
 async def ingest_document(doc: DocumentIngest, background_tasks: BackgroundTasks):
@@ -1123,75 +997,152 @@ async def get_project_context(project: str, topic: Optional[str] = None):
 
 @app.post("/api/search/vector", tags=["Search"])
 async def vector_search(query: dict):
-    """Perform REAL vector similarity search using PostgreSQL database"""
+    """Perform REAL vector similarity search using Qdrant"""
     try:
         search_query = query.get("query", "")
         limit = query.get("limit", 10)
-        threshold = query.get("threshold", 0.5)
+        min_score = query.get("min_score", 0.5)
+        collection = query.get("collection", "fk2_documents")
         project = query.get("project", None)
         
-        logger.info(f"NEW SIMPLIFIED vector search: {search_query}, limit={limit}, threshold={threshold}")
+        logger.info(f"Real Qdrant vector search: {search_query}, limit={limit}, min_score={min_score}, collection={collection}")
         
-        # Simplified direct database query to avoid the DocumentQueries issue
-        async with db_manager.get_postgres_connection() as conn:
-            # Build simple search conditions
-            conditions = ["1=1"]
-            params = []
+        # Generate query embeddings using Ollama
+        query_vector = await ollama_client.get_embeddings(search_query)
+        if not query_vector:
+            raise HTTPException(status_code=500, detail="Embedding generation failed")
+        
+        # Initialize Qdrant client
+        qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
+        client = QdrantClient(url=qdrant_url)
+        
+        # Build filter if project specified
+        filter_conditions = None
+        if project:
+            filter_conditions = Filter(
+                must=[
+                    FieldCondition(
+                        key="project",
+                        match=MatchValue(value=project)
+                    )
+                ]
+            )
+        
+        # Perform vector search in Qdrant
+        search_results = client.search(
+            collection_name=collection,
+            query_vector=query_vector,
+            limit=limit,
+            with_vectors=False,
+            with_payload=True,
+            query_filter=filter_conditions,
+            score_threshold=min_score
+        )
+        
+        # Format results - ensure content field is preserved
+        results = []
+        for res in search_results:
+            score = res.score
+            payload = res.payload or {}
             
-            if search_query:
-                conditions.append("(title ILIKE $1 OR content ILIKE $1)")
-                params.append(f"%{search_query}%")
+            # Ensure content field is included in payload
+            # Check for content in various possible locations
+            if 'content' not in payload:
+                # Try to find content in other fields
+                if 'text' in payload:
+                    payload['content'] = payload['text']
+                elif 'chunk_content' in payload:
+                    payload['content'] = payload['chunk_content']
+                elif 'document_content' in payload:
+                    payload['content'] = payload['document_content']
+                # If still no content, try to fetch from database as fallback
+                elif 'document_id' in payload:
+                    try:
+                        async with db_manager.get_postgres_connection() as conn:
+                            doc_content = await conn.fetchval(
+                                "SELECT content FROM documents WHERE id = $1",
+                                payload['document_id']
+                            )
+                            if doc_content:
+                                payload['content'] = doc_content[:1000]  # Limit to 1000 chars for performance
+                    except:
+                        pass  # Silently fail if can't get content from DB
             
-            if project:
-                conditions.append("project = $2")
-                params.append(project)
-            
-            # Get documents directly
-            doc_query = f"""
-                SELECT 
-                    id, title, content, project, doc_type, tags, metadata, created_at, updated_at,
-                    LENGTH(content) as file_size
-                FROM documents
-                WHERE {' AND '.join(conditions)}
-                ORDER BY updated_at DESC
-                LIMIT {limit}
-            """
-            
-            logger.info(f"Executing query: {doc_query} with params: {params}")
-            documents = await conn.fetch(doc_query, *params)
-            
-            # Convert to vector search format
-            results = []
-            for doc in documents:
-                results.append({
-                    "id": str(doc["id"]),
-                    "score": 0.85,  # TODO: Implement real vector similarity
-                    "payload": {
-                        "content": doc["content"][:500] + "..." if len(doc["content"]) > 500 else doc["content"],
-                        "title": doc["title"],
-                        "source_file": f"/documents/{doc['title']}.{doc['doc_type']}",
-                        "file_type": doc["doc_type"],
-                        "file_size": doc["file_size"],
-                        "project": doc["project"],
-                        "tags": doc["tags"] if doc["tags"] else [],
-                        "created_date": doc["created_at"].isoformat()
-                    }
-                })
-            
-            # Filter by threshold
-            results = [r for r in results if r["score"] >= threshold]
-            
-            return {
-                "success": True,
-                "data": results,
-                "message": f"Found {len(results)} documents",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "query": search_query,
-                "total_results": len(results)
-            }
+            results.append({
+                "id": str(res.id),
+                "score": float(score),
+                "payload": payload
+            })
+        
+        logger.info(f"Qdrant search returned {len(results)} results with scores {[r['score'] for r in results[:5]]}")
+        
+        return {
+            "success": True,
+            "data": results,
+            "query": search_query,
+            "total_results": len(results),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "collection": collection,
+            "min_score": min_score
+        }
+        
     except Exception as e:
-        logger.error(f"REAL vector search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Qdrant vector search failed: {e}")
+        # Fallback to SQL search if Qdrant fails
+        logger.warning("Falling back to SQL search")
+        return await fallback_sql_search(query)
+
+async def fallback_sql_search(query: dict):
+    """Fallback SQL search when Qdrant is unavailable"""
+    search_query = query.get("query", "")
+    limit = query.get("limit", 10)
+    project = query.get("project", None)
+    
+    async with db_manager.get_postgres_connection() as conn:
+        conditions = ["1=1"]
+        params = []
+        
+        if search_query:
+            conditions.append("(title ILIKE $1 OR content ILIKE $1)")
+            params.append(f"%{search_query}%")
+        
+        if project:
+            conditions.append(f"project = ${len(params)+1}")
+            params.append(project)
+        
+        doc_query = f"""
+            SELECT id, title, content, project, doc_type, tags, metadata, created_at, updated_at
+            FROM documents
+            WHERE {' AND '.join(conditions)}
+            ORDER BY updated_at DESC
+            LIMIT {limit}
+        """
+        
+        documents = await conn.fetch(doc_query, *params)
+        
+        results = []
+        for doc in documents:
+            results.append({
+                "id": str(doc["id"]),
+                "score": 0.5,  # Fallback score
+                "payload": {
+                    "content": doc["content"][:500] + "..." if len(doc["content"]) > 500 else doc["content"],
+                    "title": doc["title"],
+                    "project": doc["project"],
+                    "doc_type": doc["doc_type"],
+                    "tags": doc["tags"] if doc["tags"] else [],
+                    "created_at": doc["created_at"].isoformat()
+                }
+            })
+        
+        return {
+            "success": True,
+            "data": results,
+            "query": search_query,
+            "total_results": len(results),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "fallback": True
+        }
 
 @app.post("/api/docs/search", tags=["Search"])
 async def simple_document_search(request: dict):

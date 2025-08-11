@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 import os
 import logging
 from datetime import datetime
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,10 @@ router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "fk2025neo4j")
+
+# LLM configuration
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://fk2_ollama:11434")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "llama3:8b")
 
 class Neo4jService:
     """Service for Neo4j graph database operations"""
@@ -258,28 +263,37 @@ async def query_knowledge_graph(request: dict):
                 sources.append(source)
                 context_nodes.append(node_data)
             
-            # Generate answer based on sources
+            # Generate answer using LLM based on sources
             if sources:
                 # Build context from top sources
                 context = "\n\n".join([
-                    f"Source ({s['type']}): {s['content']}" 
-                    for s in sources[:3]
+                    f"Source {i+1} ({s['type']}): {s['content']}"
+                    for i, s in enumerate(sources[:3])
                 ])
-                
-                answer = f"Based on the knowledge graph, here's what I found about '{question}':\n\n"
-                answer += f"Found {len(sources)} relevant sources in the knowledge graph. "
-                
-                # Summarize key findings
-                entity_types = set(s['type'] for s in sources)
-                answer += f"The information spans across: {', '.join(entity_types)}. "
-                
-                # Add specific content if available
-                if sources[0]['content']:
-                    answer += f"\n\nMost relevant finding:\n{sources[0]['content'][:300]}..."
-                
+
+                prompt = (
+                    "You are a helpful assistant answering questions based on a knowledge graph.\n"
+                    f"Question: {question}\n\nContext:\n{context}\n\n"
+                    "Provide a concise answer using only the given context."
+                )
+
+                try:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        response = await client.post(
+                            f"{OLLAMA_URL}/api/generate",
+                            json={"model": CHAT_MODEL, "prompt": prompt, "stream": False},
+                        )
+                        data = response.json()
+                        answer = data.get("response", "").strip()
+                except Exception as e:
+                    logger.error(f"LLM generation failed: {e}")
+                    answer = "Unable to generate an answer from the model."
+
                 confidence = min(1.0, sources[0]['relevance'] / 2.0)
             else:
-                answer = f"No specific information found about '{question}' in the knowledge graph."
+                answer = (
+                    f"No specific information found about '{question}' in the knowledge graph."
+                )
                 confidence = 0.0
         
         return {
@@ -288,6 +302,7 @@ async def query_knowledge_graph(request: dict):
             "confidence": confidence,
             "question": question,
             "project": project,
+            "model": CHAT_MODEL,
             "timestamp": datetime.now().isoformat()
         }
         

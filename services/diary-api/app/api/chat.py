@@ -223,4 +223,26 @@ When referencing specific documents or data, mention your sources."""
 
 {conversation_context}
 
-User: {user_message}
+User: {user_message}"""
+
+            # Make request to Ollama
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "num_predict": max_tokens,
+                            "temperature": 0.7
+                        }
+                    }
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result.get("response", "No response generated")
+                
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            return f"Error generating response: {e}"

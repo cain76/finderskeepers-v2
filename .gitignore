@@ -1,25 +1,10 @@
 node_modules
 .env
 .env.backup
-logs/
-data/
-~/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.coverage
-.pytest_cache/
-.DS_Store
-.vscode/
-*.log
-backups/
-.env.example
-.env
-.env.backup
-services/diary-api/test_env/
+.env.local
+.env.production
+.env.development
+.env.test
 *.env
 .env
 
@@ -38,3 +23,19 @@ docs/resources/langchain-fastapi-integration/
 
 # Documentation directories (scraped content)
 docs/
+
+# Security and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+config/secrets/
+
+# Temporary files that might contain sensitive data
+*.tmp
+*.temp
+*_temp
+*.backup
+*_backup

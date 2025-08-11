@@ -34,8 +34,8 @@ services:
     environment:
       # Basic Authentication
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-jeremy.cn.davis@gmail.com}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-Toolman7424!}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-secure_password}
       
       # Network Configuration
       - WEBHOOK_URL=http://localhost:5678/
@@ -45,7 +45,7 @@ services:
       
       # Security & Performance
       - GENERIC_TIMEZONE=America/Chicago
-      - N8N_JWT_SECRET=${N8N_JWT_SECRET:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MzY1MDU0ZS05YjY0LTRiY2ItOTFhZS0yMWRjNTc3NzRjMjUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzQyNjU4ODc0fQ.P4R2cmeV9uwsUH3Dohf8kvhEXMIoAu_3MwElSvvyiH8}
+      - N8N_JWT_SECRET=${N8N_JWT_SECRET:-secure_jwt_secret_replace_with_your_own}
       
       # Fix deprecation warnings
       - N8N_RUNNERS_ENABLED=true  # Enable task runners (required for future versions)
@@ -57,7 +57,7 @@ services:
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_DATABASE=finderskeepers_v2
       - DB_POSTGRESDB_USER=finderskeepers
-      - DB_POSTGRESDB_PASSWORD=fk2025secure
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       
       # Enhanced Features
       - N8N_TEMPLATES_ENABLED=true
@@ -133,10 +133,10 @@ services:
       - TIMEZONE=America/Chicago
       
       # Database connections for bitcain
-      - POSTGRES_URL=postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=fk2025neo4j
+      - POSTGRES_URL=${POSTGRES_URL:-postgresql://finderskeepers:@postgres:5432/finderskeepers_v2}
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - REDIS_URL=redis://redis:6379
       - QDRANT_URL=http://qdrant:6333
       
@@ -212,7 +212,7 @@ services:
     environment:
       - POSTGRES_DB=finderskeepers_v2
       - POSTGRES_USER=finderskeepers
-      - POSTGRES_PASSWORD=fk2025secure
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - PGDATA=/var/lib/postgresql/data/pgdata
       - CUDA_VISIBLE_DEVICES=0
       - NVIDIA_VISIBLE_DEVICES=0
@@ -288,7 +288,7 @@ services:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt
     environment:
-      - NEO4J_AUTH=neo4j/fk2025neo4j
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc", "graph-data-science"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*,gds.*
       - NEO4J_dbms_security_procedures_allowlist=apoc.*,gds.*
@@ -401,7 +401,7 @@ services:
       - VITE_WS_URL=ws://localhost:8000
       - VITE_NEO4J_URI=bolt://localhost:7687
       - VITE_NEO4J_USER=neo4j
-      - VITE_NEO4J_PASSWORD=fk2025neo4j
+      - VITE_NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - VITE_QDRANT_URL=http://localhost:6333
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
@@ -477,8 +477,8 @@ volumes:
 #    - Document Processing: http://localhost:8000/api/admin/processing-stats
 #    - Bulk Embedding: http://localhost:8000/api/admin/bulk-embedding
 #    - Queue Maintenance: http://localhost:8000/api/admin/queue-maintenance
-#    - n8n Workflows: http://localhost:5678 (OPTIONAL - jeremy.cn.davis@gmail.com/Toolman7424!)
-#    - Neo4j Browser: http://localhost:7474 (neo4j/fk2025neo4j)
+#    - n8n Workflows: http://localhost:5678 (OPTIONAL - admin/secure_password)
+#    - Neo4j Browser: http://localhost:7474 (neo4j/your_password)
 #    - Qdrant API: http://localhost:6333
 #    - Frontend UI: http://localhost:3000
 #    - Ollama API: http://localhost:11434

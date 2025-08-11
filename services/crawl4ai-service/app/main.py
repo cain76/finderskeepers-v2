@@ -14,6 +14,38 @@ import httpx
 import requests
 from bs4 import BeautifulSoup
 from readability import Document
+import ipaddress
+import socket
+from urllib.parse import urlparse
+# SSRF-safe URL validation helper
+def validate_url_ssrf_safe(url: str):
+    """Validate that the URL is safe for SSRF (not internal, not localhost, etc.)"""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Only http and https URLs are allowed")
+    if not parsed.hostname:
+        raise ValueError("URL must have a valid hostname")
+    try:
+        # Resolve all IPs for the hostname
+        addresses = socket.getaddrinfo(parsed.hostname, None)
+        for addr in addresses:
+            ip = addr[4][0]
+            ip_obj = ipaddress.ip_address(ip)
+            if (
+                ip_obj.is_private
+                or ip_obj.is_loopback
+                or ip_obj.is_link_local
+                or ip_obj.is_reserved
+                or ip_obj.is_multicast
+                or ip_obj.is_unspecified
+            ):
+                raise ValueError(f"URL resolves to a disallowed IP address: {ip}")
+    except Exception as e:
+        raise ValueError(f"Failed to resolve hostname: {parsed.hostname} ({str(e)})")
+    # Optionally, block certain hostnames
+    forbidden_hosts = {"localhost", "127.0.0.1", "::1"}
+    if parsed.hostname in forbidden_hosts:
+        raise ValueError("URL hostname is forbidden")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -111,6 +143,13 @@ async def scrape_url(request: ScrapeRequest):
     if not service_ready:
         raise HTTPException(status_code=503, detail="Service not ready")
     
+    # SSRF protection: validate the URL before making the request
+    try:
+        validate_url_ssrf_safe(request.url)
+    except Exception as e:
+        logger.error(f"❌ SSRF validation failed for {request.url}: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid or unsafe URL: {str(e)}")
+
     try:
         logger.info(f"🕷️ Scraping URL: {request.url}")
         

@@ -252,61 +252,155 @@ class AutomaticProcessingPipeline:
                         return embeddings[0] if isinstance(embeddings[0], list) else embeddings
         except Exception as e:
             logger.warning(f"Embedding generation failed: {e}")
-        
+
         return []
-    
+
+    async def infer_entity_relationships(
+        self, content: str, entities: List[Tuple]
+    ) -> List[Tuple[str, str, str, str]]:
+        """Infer relationships between entities using the chat model."""
+        if not content or not entities:
+            return []
+
+        entity_list = ", ".join(name for _, name, _ in entities[:20])
+        prompt = f"""Given the following text and list of entities, identify any relationships between the entities.
+Return a JSON array where each item is {{"source": "EntityA", "target": "EntityB", "relationship": "RELATION", "context": "short reason"}}.
+
+Text:
+{content[:2000]}
+
+Entities: {entity_list}
+
+JSON:"""
+
+        relationships: List[Tuple[str, str, str, str]] = []
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.ollama_url}/api/generate",
+                    json={
+                        "model": self.chat_model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.2, "num_predict": 512},
+                    },
+                )
+
+            if response.status_code == 200:
+                resp_text = response.json().get("response", "[]")
+                start = resp_text.find("[")
+                end = resp_text.rfind("]") + 1
+                if start >= 0 and end > start:
+                    try:
+                        data = json.loads(resp_text[start:end])
+                        for item in data:
+                            if all(k in item for k in ["source", "target", "relationship"]):
+                                relationships.append(
+                                    (
+                                        item["source"],
+                                        item["target"],
+                                        item["relationship"],
+                                        item.get("context", ""),
+                                    )
+                                )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        return relationships
+
     async def create_knowledge_graph(self, doc: Dict, entities: List[Tuple]) -> List[Dict]:
         """Create knowledge graph relationships in Neo4j"""
         relationships = []
-        
+
+        inferred = await self.infer_entity_relationships(doc.get("content", ""), entities)
+
         try:
             driver = AsyncGraphDatabase.driver(
                 self.neo4j_uri,
                 auth=(self.neo4j_user, self.neo4j_password)
             )
-            
+
             async with driver.session() as session:
                 # Create document node
-                await session.run("""
+                await session.run(
+                    """
                     MERGE (d:Document {id: $id})
                     SET d.title = $title,
                         d.project = $project,
                         d.doc_type = $doc_type,
                         d.updated_at = datetime()
-                """, {
-                    "id": str(doc['id']),
-                    "title": doc['title'],
-                    "project": doc['project'],
-                    "doc_type": doc['doc_type']
-                })
-                
-                # Create entities and relationships
+                    """,
+                    {
+                        "id": str(doc['id']),
+                        "title": doc['title'],
+                        "project": doc['project'],
+                        "doc_type": doc['doc_type'],
+                    },
+                )
+
+                # Create entities and document->entity relationships
                 for entity_type, entity_name, _ in entities:
-                    await session.run("""
+                    await session.run(
+                        """
                         MERGE (e:Entity {name: $name, type: $type})
                         SET e.updated_at = datetime()
-                    """, {"name": entity_name, "type": entity_type})
-                    
-                    await session.run("""
+                        """,
+                        {"name": entity_name, "type": entity_type},
+                    )
+
+                    await session.run(
+                        """
                         MATCH (d:Document {id: $doc_id})
                         MATCH (e:Entity {name: $entity_name, type: $entity_type})
                         MERGE (d)-[r:MENTIONS]->(e)
                         SET r.count = coalesce(r.count, 0) + 1
-                    """, {
-                        "doc_id": str(doc['id']),
-                        "entity_name": entity_name,
-                        "entity_type": entity_type
-                    })
-                    
-                    relationships.append({
-                        "type": "MENTIONS",
-                        "entity": entity_name
-                    })
-            
+                        """,
+                        {
+                            "doc_id": str(doc['id']),
+                            "entity_name": entity_name,
+                            "entity_type": entity_type,
+                        },
+                    )
+
+                    relationships.append(
+                        {"type": "MENTIONS", "entity": entity_name}
+                    )
+
+                # Create inferred entity relationships
+                for source, target, rel, context in inferred:
+                    rel_type = re.sub(r"[^A-Z_]", "", rel.upper()) or "RELATED_TO"
+                    await session.run(
+                        f"""
+                        MATCH (e1:Entity {{name: $source}})
+                        MATCH (e2:Entity {{name: $target}})
+                        MERGE (e1)-[r:{rel_type}]->(e2)
+                        SET r.context = $context,
+                            r.source_doc = $doc_id,
+                            r.updated_at = datetime()
+                        """,
+                        {
+                            "source": source,
+                            "target": target,
+                            "context": context,
+                            "doc_id": str(doc['id']),
+                        },
+                    )
+                    relationships.append(
+                        {
+                            "type": rel_type,
+                            "source": source,
+                            "target": target,
+                            "context": context,
+                        }
+                    )
+
             await driver.close()
         except Exception as e:
             logger.warning(f"Neo4j operations failed: {e}")
-        
+
         return relationships
     
     async def store_in_vector_db(self, doc: Dict, embeddings: List[float], entities: List[Tuple]):

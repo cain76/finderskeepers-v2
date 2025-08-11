@@ -252,16 +252,74 @@ class AutomaticProcessingPipeline:
         # Return empty embeddings if all retries fail
         logger.error("All embedding generation attempts failed")
         return []
-    
+
+    async def infer_entity_relationships(
+        self, content: str, entities: List[Tuple]
+    ) -> List[Tuple[str, str, str, str]]:
+        """Infer relationships between entities using the chat model."""
+        if not content or not entities:
+            return []
+
+        entity_list = ", ".join(name for _, name, _ in entities[:20])
+        prompt = f"""Given the following text and list of entities, identify any relationships between the entities.
+Return a JSON array where each item is {{"source": "EntityA", "target": "EntityB", "relationship": "RELATION", "context": "short reason"}}.
+
+Text:
+{content[:2000]}
+
+Entities: {entity_list}
+
+JSON:"""
+
+        relationships: List[Tuple[str, str, str, str]] = []
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.ollama_url}/api/generate",
+                    json={
+                        "model": self.chat_model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.2, "num_predict": 512},
+                    },
+                )
+
+            if response.status_code == 200:
+                resp_text = response.json().get("response", "[]")
+                start = resp_text.find("[")
+                end = resp_text.rfind("]") + 1
+                if start >= 0 and end > start:
+                    try:
+                        data = json.loads(resp_text[start:end])
+                        for item in data:
+                            if all(k in item for k in ["source", "target", "relationship"]):
+                                relationships.append(
+                                    (
+                                        item["source"],
+                                        item["target"],
+                                        item["relationship"],
+                                        item.get("context", ""),
+                                    )
+                                )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        return relationships
+
     async def create_knowledge_graph(self, doc: Dict, entities: List[Tuple]) -> List[Dict]:
         """Create rich knowledge graph relationships in Neo4j"""
         relationships = []
-        
+
+        inferred = await self.infer_entity_relationships(doc.get('content', ''), entities)
+
         driver = AsyncGraphDatabase.driver(
             self.neo4j_uri,
             auth=(self.neo4j_user, self.neo4j_password)
         )
-        
+
         try:
             async with driver.session() as session:
                 # Create document node
@@ -279,7 +337,7 @@ class AutomaticProcessingPipeline:
                     "doc_type": doc['doc_type'],
                     "content_preview": doc['content'][:500]
                 })
-                
+
                 # Create project node and relationship
                 await session.run("""
                     MATCH (d:Document {id: $doc_id})
@@ -290,7 +348,7 @@ class AutomaticProcessingPipeline:
                     "project": doc['project']
                 })
                 relationships.append({"type": "BELONGS_TO", "target": doc['project']})
-                
+
                 # Create entity nodes and relationships
                 for entity_type, entity_name, metadata in entities:
                     # Create entity node
@@ -301,7 +359,7 @@ class AutomaticProcessingPipeline:
                         "name": entity_name,
                         "type": entity_type
                     })
-                    
+
                     # Create document-entity relationship
                     await session.run("""
                         MATCH (d:Document {id: $doc_id})
@@ -320,14 +378,40 @@ class AutomaticProcessingPipeline:
                         "entity": entity_name,
                         "entity_type": entity_type
                     })
-                
+
+                # Create inferred relationships between entities
+                for source, target, rel, context in inferred:
+                    rel_type = re.sub(r"[^A-Z_]", "", rel.upper()) or "RELATED_TO"
+                    await session.run(
+                        f"""
+                        MATCH (e1:Entity {{name: $source}})
+                        MATCH (e2:Entity {{name: $target}})
+                        MERGE (e1)-[r:{rel_type}]->(e2)
+                        SET r.context = $context,
+                            r.source_doc = $doc_id,
+                            r.updated_at = datetime()
+                        """,
+                        {
+                            "source": source,
+                            "target": target,
+                            "context": context,
+                            "doc_id": str(doc['id'])
+                        }
+                    )
+                    relationships.append({
+                        "type": rel_type,
+                        "source": source,
+                        "target": target,
+                        "context": context
+                    })
+
                 # Create entity-to-entity relationships based on co-occurrence
                 entity_pairs = []
                 for i, (type1, name1, _) in enumerate(entities):
                     for type2, name2, _ in entities[i+1:]:
                         if name1 != name2:
                             entity_pairs.append((name1, type1, name2, type2))
-                
+
                 for name1, type1, name2, type2 in entity_pairs[:20]:  # Limit relationships
                     await session.run("""
                         MATCH (e1:Entity {name: $name1, type: $type1})
@@ -348,10 +432,10 @@ class AutomaticProcessingPipeline:
                         "source": name1,
                         "target": name2
                     })
-                
+
         finally:
             await driver.close()
-        
+
         return relationships
     
     async def store_in_vector_db(self, doc: Dict, embeddings: List[float], entities: List[Tuple]):

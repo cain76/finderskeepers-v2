@@ -1,0 +1,131 @@
+---
+name: Security Scan
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    # Run weekly security scan on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f services/diary-api/requirements.txt ]; then
+            pip install -r services/diary-api/requirements.txt
+          fi
+
+      - name: Run Bandit Security Linter
+        uses: tj-actions/bandit@v5.1
+        with:
+          options: "-r . -f json -o bandit-report.json"
+          exit_zero: true
+
+      - name: Upload Bandit Scan Results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: bandit-report.json
+
+      - name: Run Safety Check for Python Dependencies
+        run: |
+          pip install safety
+          safety check --json --output safety-report.json || true
+
+      - name: Scan for Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: Docker Security Scan
+        if: always()
+        run: |
+          # Install Docker Scout CLI
+          curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh
+          
+          # Scan docker-compose.yml for security issues
+          if [ -f docker-compose.yml ]; then
+            echo "Checking docker-compose.yml for security configurations..."
+            # Check for exposed ports and security misconfigurations
+            grep -n "ports:" docker-compose.yml || echo "No port mappings found"
+            grep -n "privileged:" docker-compose.yml && echo "WARNING: Privileged containers found" || echo "No privileged containers"
+            grep -n "security_opt:" docker-compose.yml || echo "No security options specified"
+          fi
+
+  lint-yaml:
+    name: Lint YAML files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Lint YAML files
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file_path: .yamllint.yml
+          file_or_dir: .github/workflows/
+          format: parsable
+
+  check-env-template:
+    name: Validate Environment Template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check .env.example exists
+        run: |
+          if [ ! -f .env.example ]; then
+            echo "ERROR: .env.example template is missing"
+            exit 1
+          fi
+          echo "✅ .env.example template found"
+
+      - name: Validate no hardcoded secrets
+        run: |
+          echo "🔍 Checking for potential hardcoded secrets..."
+          
+          # Check for common secret patterns (excluding .env.example)
+          if grep -r -E "(password|secret|key|token).*[:=].*['\"][^'\"]*['\"]" . \
+             --exclude-dir=.git \
+             --exclude-dir=node_modules \
+             --exclude-dir=.venv \
+             --exclude-dir=venv \
+             --exclude=".env.example" \
+             --exclude="*.md" \
+             --exclude="*.yml" \
+             --exclude="*.yaml"; then
+            echo "⚠️  Potential hardcoded secrets found above"
+            echo "Please move these to environment variables"
+            exit 1
+          else
+            echo "✅ No obvious hardcoded secrets detected"
+          fi
+
+      - name: Check for TODO security items
+        run: |
+          echo "📝 Checking for security TODOs..."
+          grep -r -i "todo.*security\|fixme.*security" . --exclude-dir=.git || echo "No security TODOs found"

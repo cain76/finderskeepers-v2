@@ -140,6 +140,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - QDRANT_URL=http://qdrant:6333
       
+      # Security
+      - SESSION_SECRET=${SESSION_SECRET:-change_this_session_secret_in_production}
+      
       # Local LLM Configuration optimized for RTX 2080 Ti
       - OLLAMA_URL=http://ollama:11434
       - USE_LOCAL_LLM=true

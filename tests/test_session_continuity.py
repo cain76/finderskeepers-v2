@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services', 'mcp-k
 
 from knowledge_server import (
     resume_session,
-    endsession,
+    end_session,
     initialize_claude_session,
     log_conversation_message,
     log_claude_action,
@@ -180,7 +180,7 @@ class SessionContinuityTester:
         
         try:
             # End the session gracefully
-            result = await endsession(
+            result = await end_session(
                 session_id=self.test_session_id,
                 reason="test_completion",
                 completion_timeout=10,  # Shorter timeout for testing

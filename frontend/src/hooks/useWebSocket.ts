@@ -14,6 +14,7 @@ interface UseWebSocketOptions {
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const {
+    autoConnect = true,
     reconnectOnError = true,
     onConnect,
     onDisconnect,
@@ -112,10 +113,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     wsService.reconnect();
   }, []);
 
+  // Manual connect
+  const connect = useCallback(() => {
+    wsService.initialize();
+  }, []);
+
   // Setup event listeners on mount
   useEffect(() => {
-    // Initialize WebSocket connection
-    wsService.initialize();
+    // Initialize WebSocket connection if enabled
+    if (autoConnect) {
+      wsService.initialize();
+    }
 
     // Setup error handling
     const unsubscribeError = wsService.onError(handleError);
@@ -138,7 +146,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [handleConnectionChange, handleError]);
+  }, [autoConnect, handleConnectionChange, handleError]);
 
   // Setup global event listeners for activity tracking
   useEffect(() => {
@@ -233,6 +241,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     // Connection management
     ping,
     reconnect,
+    connect,
   };
 }
 

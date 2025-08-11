@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """
-Simple test to verify the ingestion module loads correctly
+Integration test script for the diary API ingestion module.
+
+This module defines lightweight asynchronous tests that verify the core
+ingestion components:
+
+* Importing key models, the format detector, the storage service, and the
+  main ingestion service.
+* Detecting the file format of a temporary document and reporting the chosen
+  processing method and metadata.
+* Performing a storage health check to validate connectivity to the backend
+  storage system.
+
+Running this script executes all tests sequentially and prints a summary of
+the results.
 """
 
 import os

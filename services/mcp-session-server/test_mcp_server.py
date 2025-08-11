@@ -9,11 +9,14 @@ import sys
 import os
 import json
 
+import pytest
+
 # Add the src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from fk2_mcp_server import FindersKeepersV2MCPServer
 
+@pytest.mark.asyncio
 async def test_server():
     """Test if the server can start and list tools"""
     print("🧪 Testing fk2-mcp server...")

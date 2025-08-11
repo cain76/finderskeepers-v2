@@ -1814,6 +1814,27 @@ async def init_server() -> str:
     else:
         return "❌ AI GOD MODE server initialization failed"
 
+
+class FindersKeepersV2MCPServer:
+    """Wrapper exposing the FastMCP server for tests.
+
+    The original module defined a global ``FastMCP`` instance and
+    ``initialize_database`` coroutine but omitted the class expected by
+    the test suite.  Importing ``FindersKeepersV2MCPServer`` therefore
+    raised an ``ImportError``.  This lightweight class simply provides
+    the expected interface while reusing the existing global server and
+    database initialisation logic.
+    """
+
+    def __init__(self) -> None:
+        # Reuse global FastMCP instance so registered tools remain
+        # available.
+        self.server = mcp
+
+    async def initialize_database(self) -> bool:
+        # Delegate to the module-level coroutine.
+        return await initialize_database()
+
 if __name__ == "__main__":
     logger.info("🚀 FindersKeepers v2 Enhanced MCP Server with FastMCP 2.10.6 Conversation Capture starting...")
     logger.info("🧠 PERSISTENT MEMORY: Never lose context across sessions!")

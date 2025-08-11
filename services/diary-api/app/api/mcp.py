@@ -72,7 +72,7 @@ async def get_conn():
     else:
         # Fallback to direct connection
         conn = await asyncpg.connect(
-            dsn="postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
+            dsn=os.getenv("DATABASE_URL", "postgresql://finderskeepers:@localhost:5432/finderskeepers_v2")
         )
         try:
             yield conn

@@ -25,10 +25,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-PG_DSN = "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASS = "fk2025neo4j"
+PG_DSN = os.getenv("DATABASE_URL", "postgresql://finderskeepers:@localhost:5432/finderskeepers_v2")
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASS = os.getenv("NEO4J_PASSWORD")
 OLLAMA_URL = "http://localhost:11434/api/generate"
 async def extract_entities_from_documents():
     """Use Ollama llama3:8b to extract entities from all documents"""

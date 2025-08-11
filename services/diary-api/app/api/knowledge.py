@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
 # Neo4j connection settings
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "fk2025neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 # LLM configuration
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://fk2_ollama:11434")

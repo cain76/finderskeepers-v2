@@ -9,6 +9,7 @@ retrieved via MCP.
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import List
 
@@ -314,7 +315,7 @@ async def get_neo4j_session():
     neo4j_manager = Neo4jManager(
         uri="bolt://localhost:7687",
         user="neo4j", 
-        password="fk2025neo4j"
+        password=os.getenv("NEO4J_PASSWORD", "your_password")
     )
     try:
         yield neo4j_manager

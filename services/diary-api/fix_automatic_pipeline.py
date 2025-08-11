@@ -18,7 +18,7 @@ class AutomaticPipelineFixer:
     """Fix the diary API to automatically store sessions and actions"""
     
     def __init__(self):
-        self.postgres_url = "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2"
+        self.postgres_url = "postgresql://finderskeepers:PLACEHOLDER_PASSWORD@postgres:5432/finderskeepers_v2"
     
     async def store_live_session_automatically(self, session_data: Dict[str, Any]):
         """Actually store the live demo session we just created"""
@@ -236,7 +236,7 @@ class AutomaticPipelineFixer:
         import neo4j
         driver = neo4j.AsyncGraphDatabase.driver(
             "bolt://neo4j:7687", 
-            auth=("neo4j", "fk2025neo4j")
+            auth=("neo4j", "PLACEHOLDER_NEO4J_PASSWORD")
         )
         
         try:

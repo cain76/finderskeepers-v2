@@ -35,13 +35,13 @@ class AutomaticProcessingPipeline:
     """Automatic document processing pipeline that triggers on document creation"""
     
     def __init__(self):
-        self.postgres_url = os.getenv("POSTGRES_URL", "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2")
+        self.postgres_url = os.getenv("POSTGRES_URL", "postgresql://finderskeepers:PLACEHOLDER_PASSWORD@postgres:5432/finderskeepers_v2")
         self.ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "mxbai-embed-large")
         self.chat_model = os.getenv("CHAT_MODEL", "llama3:8b")
         self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "fk2025neo4j")
+        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "PLACEHOLDER_NEO4J_PASSWORD")
         self.qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
         
     async def process_unprocessed_documents(self):

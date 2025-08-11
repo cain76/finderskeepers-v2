@@ -123,7 +123,7 @@ class BackgroundDocumentProcessor:
             import asyncpg
             
             postgres_url = os.getenv("POSTGRES_URL", 
-                                    "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2")
+                                    "postgresql://finderskeepers:@postgres:5432/finderskeepers_v2")
             
             conn = await asyncpg.connect(postgres_url)
             

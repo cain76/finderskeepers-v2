@@ -32,13 +32,13 @@ class DatabaseManager:
             'port': int(os.getenv('POSTGRES_PORT', '5432')),
             'database': os.getenv('POSTGRES_DB', 'finderskeepers_v2'),
             'user': os.getenv('POSTGRES_USER', 'finderskeepers'),
-            'password': os.getenv('POSTGRES_PASSWORD', 'fk2025secure'),
+            'password': os.getenv('POSTGRES_PASSWORD'),
         }
         
         self.neo4j_config = {
             'uri': os.getenv('NEO4J_URI', 'bolt://fk2_neo4j:7687'),
             'username': os.getenv('NEO4J_USERNAME', 'neo4j'),
-            'password': os.getenv('NEO4J_PASSWORD', 'fk2025neo4j'),
+            'password': os.getenv('NEO4J_PASSWORD'),
         }
         
         self.redis_config = {

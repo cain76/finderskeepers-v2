@@ -28,7 +28,7 @@ class SessionDataMigrator:
     
     def __init__(self):
         # Database connections (using Docker container names)
-        self.postgres_url = "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2"
+        self.postgres_url = "postgresql://finderskeepers:PLACEHOLDER_PASSWORD@postgres:5432/finderskeepers_v2"
         self.fastapi_url = "http://fastapi:80"  # FastAPI runs on port 80 inside container
         
         # Migration stats

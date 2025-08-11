@@ -27,10 +27,10 @@ class SafeKnowledgeProcessor:
     """Safely process all sessions into knowledge stores with monitoring"""
     
     def __init__(self):
-        self.postgres_url = "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2"
+        self.postgres_url = "postgresql://finderskeepers:PLACEHOLDER_PASSWORD@postgres:5432/finderskeepers_v2"
         self.neo4j_uri = "bolt://neo4j:7687"
         self.neo4j_user = "neo4j"
-        self.neo4j_password = "fk2025neo4j"
+        self.neo4j_password = "PLACEHOLDER_NEO4J_PASSWORD"
         self.ollama_url = "http://ollama:11434"
         
         # Safety controls

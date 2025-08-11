@@ -65,13 +65,15 @@ jobs:
         run: |
           # Install Docker Scout CLI
           curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh
-          
+
           # Scan docker-compose.yml for security issues
           if [ -f docker-compose.yml ]; then
             echo "Checking docker-compose.yml for security configurations..."
             # Check for exposed ports and security misconfigurations
             grep -n "ports:" docker-compose.yml || echo "No port mappings found"
-            grep -n "privileged:" docker-compose.yml && echo "WARNING: Privileged containers found" || echo "No privileged containers"
+            grep -n "privileged:" docker-compose.yml && \
+              echo "WARNING: Privileged containers found" || \
+              echo "No privileged containers"
             grep -n "security_opt:" docker-compose.yml || echo "No security options specified"
           fi
 
@@ -107,7 +109,7 @@ jobs:
       - name: Validate no hardcoded secrets
         run: |
           echo "🔍 Checking for potential hardcoded secrets..."
-          
+
           # Check for common secret patterns (excluding .env.example)
           if grep -r -E "(password|secret|key|token).*[:=].*['\"][^'\"]*['\"]" . \
              --exclude-dir=.git \

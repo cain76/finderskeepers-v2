@@ -24,7 +24,7 @@ class DocumentStorageService:
         self.postgres_url = "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2"
         self.neo4j_uri = "bolt://neo4j:7687"
         self.neo4j_user = "neo4j"
-        self.neo4j_password = "fk2025neo4j"
+        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "changeme_neo4j_password")
         
     async def store_document_properly(self, doc_data: Dict[str, Any], embeddings: List[float]):
         """Actually store the document in all knowledge stores"""

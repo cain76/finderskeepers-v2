@@ -36,21 +36,21 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-changeme}
-      
+
       # Network Configuration
       - WEBHOOK_URL=http://localhost:5678/
       - N8N_PROTOCOL=http
       - N8N_HOST=localhost
       - N8N_PORT=5678
-      
+
       # Security & Performance
       - GENERIC_TIMEZONE=${TZ:-America/Chicago}
       - N8N_JWT_SECRET=${N8N_JWT_SECRET:-please_change_this_jwt_secret_in_production}
-      
+
       # Fix deprecation warnings
       - N8N_RUNNERS_ENABLED=true  # Enable task runners (required for future versions)
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true  # Enforce secure file permissions
-      
+
       # Database Configuration (PostgreSQL)
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
@@ -58,25 +58,25 @@ services:
       - DB_POSTGRESDB_DATABASE=finderskeepers_v2
       - DB_POSTGRESDB_USER=finderskeepers
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-changeme_postgres_password}
-      
+
       # Enhanced Features
       - N8N_TEMPLATES_ENABLED=true
       - N8N_DIAGNOSTICS_ENABLED=false  # Disable telemetry for privacy
       - N8N_VERSION_NOTIFICATIONS_ENABLED=true
       - N8N_COMMUNITY_PACKAGES_ENABLED=true
-      
+
       # GPU environment variables for bitcain's RTX 2080 Ti
       - CUDA_VISIBLE_DEVICES=0
       - NVIDIA_VISIBLE_DEVICES=0
-      
+
       # Workflow execution settings - REGULAR MODE FOR SINGLE INSTANCE
       - EXECUTIONS_MODE=regular
       # Queue settings disabled for regular mode
       # - QUEUE_BULL_REDIS_HOST=redis
       # - QUEUE_BULL_REDIS_PORT=6379
       # - OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=true
-  - N8N_RUNNERS_MODE=internal
-      
+      - N8N_RUNNERS_MODE=internal
+
       # Logging
       - N8N_LOG_LEVEL=debug
       - N8N_LOG_OUTPUT=console

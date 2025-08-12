@@ -151,4 +151,23 @@ Be concise but comprehensive in your responses. If you reference specific inform
 
 {conversation_context}
 
-User: {request.message}
+User: {request.message}"""
+
+        # Generate response using Ollama
+        assistant_response = await generate_ollama_response(full_prompt, request.model)
+        
+        return ChatResponse(
+            response=assistant_response,
+            model=request.model,
+            context_used=len(knowledge_context) > 0,
+            session_id=request.session_id
+        )
+    
+    except Exception as e:
+        logger.error(f"Error processing chat message: {e}")
+        return ChatResponse(
+            response=f"I encountered an error processing your message: {str(e)}",
+            model=request.model,
+            context_used=False,
+            session_id=request.session_id or "error"
+        )

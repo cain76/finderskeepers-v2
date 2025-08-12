@@ -49,7 +49,7 @@ class Neo4jService {
     // Use environment variables or defaults for Neo4j connection
     this.uri = import.meta.env.VITE_NEO4J_URI || 'bolt://localhost:7687';
     this.username = import.meta.env.VITE_NEO4J_USER || 'neo4j';
-    this.password = import.meta.env.VITE_NEO4J_PASSWORD || 'fk2025neo4j';
+    this.password = import.meta.env.VITE_NEO4J_PASSWORD || 'changeme_neo4j_password';
   }
 
   async connect(): Promise<void> {

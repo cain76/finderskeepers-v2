@@ -156,9 +156,19 @@ app.add_middleware(
 )
 
 # Session middleware for security
+# Enforce a strong session secret in production
+SESSION_SECRET = os.getenv("SESSION_SECRET")
+ENV = os.getenv("ENV", "production").lower()
+if not SESSION_SECRET:
+    if ENV == "production":
+        print("ERROR: SESSION_SECRET environment variable must be set in production.", file=sys.stderr)
+        sys.exit(1)
+    else:
+        # Use a default for development only
+        SESSION_SECRET = "dev-secret-key-change-me"
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production")
+    secret_key=SESSION_SECRET
 )
 
 # Security headers middleware

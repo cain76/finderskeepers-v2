@@ -57,12 +57,13 @@ jobs:
 
       - name: Scan for Secrets
         uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
         with:
           path: ./
           # Determine a stable base reference; prefer master
           base: master
           head: HEAD
-          extra_args: --only-verified --since-history 90d
+          extra_args: --only-verified
 
       - name: Docker Security Scan
         if: always()

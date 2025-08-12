@@ -169,5 +169,5 @@ User: {request.message}"""
             response=f"I encountered an error processing your message: {str(e)}",
             model=request.model,
             context_used=False,
-            session_id=request.session_id or "error"
+            session_id=request.session_id or "unknown-session"
         )

@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for commit range scans (e.g., TruffleHog base/head)
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -57,9 +59,10 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: main
+          # Determine a stable base reference; prefer master
+          base: master
           head: HEAD
-          extra_args: --debug --only-verified
+          extra_args: --only-verified --since-history 90d
 
       - name: Docker Security Scan
         if: always()

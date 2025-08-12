@@ -147,9 +147,12 @@ app.add_middleware(
 )
 
 # Security middleware
+# Configure allowed hosts from environment variable, defaulting to localhost and 127.0.0.1
+allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
+allowed_hosts = [host.strip() for host in allowed_hosts_env.split(",") if host.strip()]
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "*"]
+    allowed_hosts=allowed_hosts
 )
 
 # Session middleware for security

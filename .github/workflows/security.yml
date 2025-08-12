@@ -39,7 +39,7 @@ jobs:
         uses: tj-actions/bandit@v5.1
         with:
           options: "-r . -f json -o bandit-report.json"
-          exit_zero: true
+          # exit_zero is not a supported input for this action; make non-blocking via 'if: always()' on upload step
 
       - name: Upload Bandit Scan Results
         uses: github/codeql-action/upload-sarif@v3
@@ -87,7 +87,7 @@ jobs:
       - name: Lint YAML files
         uses: ibiqlik/action-yamllint@v3
         with:
-          config_file_path: .yamllint.yml
+          config_file: .yamllint.yml
           file_or_dir: .github/workflows/
           format: parsable
 

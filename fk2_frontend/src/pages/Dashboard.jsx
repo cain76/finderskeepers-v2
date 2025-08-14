@@ -16,7 +16,9 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/health');
+        const apiUrl = import.meta.env.VITE_API_URL || '';
+        const healthUrl = apiUrl ? `${apiUrl.replace(/\/$/, '')}/health` : '/health';
+        const res = await fetch(healthUrl);
         const data = await res.json();
         setServices(data.services || {});
       } catch (err) {

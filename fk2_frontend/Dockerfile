@@ -15,7 +15,8 @@ WORKDIR /app
 # separately allows Docker to cache npm install steps when only
 # application code changes.
 COPY package*.json ./
-RUN npm ci
+# Use npm ci when a lockfile exists; otherwise fall back to npm install
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy the rest of the frontend source code
 COPY . .

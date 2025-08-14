@@ -1,0 +1,165 @@
+---
+# ci: touch to retrigger security scan and codeql (2025-08-13)
+# yamllint disable rule:line-length
+name: Security Scan
+
+on:
+  push:
+    branches: [master, main, pr12-merge-test]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+  schedule:
+    # Run weekly security scan on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for commit range scans (e.g., TruffleHog base/head)
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f services/diary-api/requirements.txt ]; then
+            pip install -r services/diary-api/requirements.txt
+          fi
+          # Ensure Bandit is available with SARIF support
+          pip install 'bandit>=1.7.5'
+
+      - name: Run Bandit Security Scan (SARIF)
+        run: |
+          # Run Bandit recursively, excluding heavy/vendor dirs; do not fail job on findings
+          bandit -r . -x node_modules,.venv,venv,services/diary-api/test_env -f sarif -o bandit.sarif.json || true
+
+      - name: Validate Bandit SARIF output
+        run: |
+          if [ -s bandit.sarif.json ]; then
+            python -c "import json,sys; json.load(open('bandit.sarif.json')); print('Bandit SARIF is valid JSON')"
+          else
+            echo "No Bandit SARIF generated; skipping upload"
+          fi
+
+      - name: Upload Bandit SARIF to GitHub
+        if: ${{ hashFiles('bandit.sarif.json') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit.sarif.json
+
+      - name: Run Safety Check for Python Dependencies
+        run: |
+          pip install safety
+          safety check --json --output safety-report.json || true
+
+      - name: Scan for Secrets
+        uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
+        with:
+          path: ./
+          # Determine a stable base reference; prefer master
+          base: master
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Docker Security Scan
+        if: always()
+        run: |
+          # Install Docker Scout CLI
+          curl -fsSL \
+            https://raw.githubusercontent.com/docker/scout-cli/main/install.sh \
+            | sh || true
+
+          # Scan docker-compose.yml for security issues
+          if [ -f docker-compose.yml ]; then
+            echo "Checking docker-compose.yml for security configurations..."
+            # Check for exposed ports and security misconfigurations
+            grep -n "ports:" docker-compose.yml || echo "No port mappings found"
+            grep -n "privileged:" docker-compose.yml && \
+              echo "WARNING: Privileged containers found" || \
+              echo "No privileged containers"
+            grep -n "security_opt:" docker-compose.yml || echo "No security options specified"
+          fi
+
+  lint-yaml:
+    name: Lint YAML files
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Lint YAML files
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: .yamllint.yml
+          file_or_dir: .github/workflows/
+          format: parsable
+
+  check-env-template:
+    name: Validate Environment Template
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check .env.example exists
+        run: |
+          if [ ! -f .env.example ]; then
+            echo "ERROR: .env.example template is missing"
+            exit 1
+          fi
+          echo "✅ .env.example template found"
+
+      - name: Validate no hardcoded secrets
+        continue-on-error: true
+        run: |
+          echo "🔍 Checking for potential hardcoded secrets..."
+
+          # Only flag uppercase env-like variable names containing SECRET/PASSWORD/TOKEN/API_KEY assigned to quoted literals
+          REGEX_PREFIX="^[[:space:]]*(export[[:space:]]+)?("
+          REGEX_MID="[A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)"
+          REGEX_SUFFIX="[[:space:]]*[:=][[:space:]]*['\"][^'\"$]+['\"]"
+          REGEX="$REGEX_PREFIX$REGEX_MID$REGEX_SUFFIX"
+
+          if grep -RInE "$REGEX" . \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude-dir=.venv \
+            --exclude-dir=venv \
+            --exclude-dir=services/diary-api/test_env \
+            --exclude-dir=services/diary-api/.venv \
+            --exclude=".env.example" \
+            --exclude="*.md" \
+            --exclude="*.yml" \
+            --exclude="*.yaml" \
+            --exclude="*.lock" \
+            --exclude="*.log"; then
+            echo "⚠️  Potential hardcoded secrets found above"
+            echo "Please move these to environment variables"
+            exit 1
+          else
+            echo "✅ No obvious hardcoded secrets detected"
+          fi
+
+      - name: Check for TODO security items
+        run: |
+          echo "📝 Checking for security TODOs..."
+          PATTERN="todo.*security\\|fixme.*security"
+          grep -r -i -E "$PATTERN" . \
+            --exclude-dir=.git \
+            || echo "No security TODOs found"

@@ -1,13 +1,18 @@
+---
 name: "CodeQL"
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "pr12-merge-test"]
   pull_request:
     branches: ["master"]
+  workflow_dispatch:
   schedule:
     - cron: '36 0 * * 5'
 
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   analyze:
     name: Analyze
@@ -25,11 +30,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
+
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

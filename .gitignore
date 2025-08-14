@@ -1,27 +1,36 @@
 node_modules
 .env
 .env.backup
-logs/
-data/
-~/
+.env.local
+.env.production
+.env.development
+.env.test
+*.env
+.env
+
+# Python cache and build directories
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 *.so
+build/
+dist/
+*.egg-info/
 .coverage
 .pytest_cache/
-.DS_Store
-.vscode/
-*.log
-backups/
-.env.example
-.env
-.env.backup
-services/diary-api/test_env/
-*.env
-.env
+.tox/
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Service-specific virtual environments
+services/*/.venv/
+services/*/venv/
 
 # Investigation and debugging artifacts
 investigate-upload-status.js
@@ -38,3 +47,19 @@ docs/resources/langchain-fastapi-integration/
 
 # Documentation directories (scraped content)
 docs/
+
+# Security and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+config/secrets/
+
+# Temporary files that might contain sensitive data
+*.tmp
+*.temp
+*_temp
+*.backup
+*_backup

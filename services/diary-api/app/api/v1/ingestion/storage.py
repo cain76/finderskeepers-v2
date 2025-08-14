@@ -36,12 +36,12 @@ class StorageService:
         self._neo4j_driver = None
         
         # Configuration from environment
-        self.pg_dsn = os.getenv("DATABASE_URL", "postgresql://finderskeepers:@postgres:5432/finderskeepers_v2")
+        self.pg_dsn = os.getenv("DATABASE_URL", "postgresql://finderskeepers:fk2025secure@postgres:5432/finderskeepers_v2")
         self.qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
         self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
         self.neo4j_uri = os.getenv("NEO4J_URI", "neo4j://neo4j:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-        self.neo4j_password = os.getenv("NEO4J_PASSWORD")
+        self.neo4j_password = os.getenv("NEO4J_PASSWORD", "fk2025neo4j")
         
         # Collection names
         self.qdrant_collection = "fk2_documents"

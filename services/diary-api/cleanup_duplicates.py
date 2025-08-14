@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class DuplicateCleanup:
     def __init__(self):
-        self.pg_url = "postgresql://finderskeepers:PLACEHOLDER_PASSWORD@localhost:5432/finderskeepers_v2"
+        self.pg_url = "postgresql://finderskeepers:fk2025secure@localhost:5432/finderskeepers_v2"
         
     async def analyze_duplicates(self) -> Dict[str, Any]:
         """Analyze duplicate documents in the database"""

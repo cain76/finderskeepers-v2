@@ -43,6 +43,14 @@ mkdir -p logs
 chmod -R 755 data/
 chmod -R 755 logs/
 
+# Ensure shared network exists
+echo "🌐 Ensuring shared Docker network exists..."
+if [ ! -f ./ensure-network.sh ] || [ ! -x ./ensure-network.sh ]; then
+    echo "❌ ensure-network.sh not found or not executable! Please add the file and ensure it has execute permissions."
+    exit 1
+fi
+./ensure-network.sh
+
 # Pull latest images
 echo "📦 Pulling latest Docker images..."
 docker compose pull

@@ -66,3 +66,6 @@ config/secrets/
 
 # n8n local build artifacts (container-created; may be root-owned)
 n8n/custom-nodes/
+
+# Vite dev server cache (untracked noise)
+fk2_frontend/.vite/

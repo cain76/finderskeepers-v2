@@ -453,6 +453,11 @@ services:
 
 networks:
   shared-network:
+  # Note: Using an external network because a pre-existing
+  # 'shared-network' is already in use on this host. This avoids
+  # compose label warnings and preserves other containers joined
+  # to that network. To have Compose manage it instead, remove the
+  # network first: `docker compose down && docker network rm shared-network`.
     external: true
     name: shared-network
 

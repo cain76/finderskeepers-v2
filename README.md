@@ -70,7 +70,7 @@ Add to Claude Desktop config:
 ### Environment Variables
 Create `.env` file:
 ```env
-DOCKER_USERNAME=bitcainnet
+DOCKER_USERNAME=your_username
 DOCKER_TOKEN=your_token
 OPENAI_API_KEY=optional_fallback
 ```

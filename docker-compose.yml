@@ -399,8 +399,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=http://localhost:8000
-      - VITE_WS_URL=ws://localhost:8000
+      - VITE_API_URL=http://fastapi:8000
+      - VITE_WS_URL=ws://fastapi:8000
       - VITE_NEO4J_URI=bolt://localhost:7687
       - VITE_NEO4J_USER=neo4j
       - VITE_NEO4J_PASSWORD=${NEO4J_PASSWORD:-changeme_neo4j_password}

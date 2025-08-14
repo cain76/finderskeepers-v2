@@ -1,5 +1,6 @@
 ---
 # ci: touch to retrigger security scan and codeql (2025-08-13)
+# yamllint disable rule:line-length
 name: Security Scan
 
 on:
@@ -79,7 +80,9 @@ jobs:
         if: always()
         run: |
           # Install Docker Scout CLI
-          curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh || true
+          curl -fsSL \
+            https://raw.githubusercontent.com/docker/scout-cli/main/install.sh \
+            | sh || true
 
           # Scan docker-compose.yml for security issues
           if [ -f docker-compose.yml ]; then
@@ -129,8 +132,7 @@ jobs:
 
           # Only flag uppercase env-like variable names containing SECRET/PASSWORD/TOKEN/API_KEY assigned to quoted literals
           REGEX_PREFIX="^[[:space:]]*(export[[:space:]]+)?("
-          REGEX_MID="[A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|"\
-          "SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)"
+          REGEX_MID="[A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)"
           REGEX_SUFFIX="[[:space:]]*[:=][[:space:]]*['\"][^'\"$]+['\"]"
           REGEX="$REGEX_PREFIX$REGEX_MID$REGEX_SUFFIX"
 
@@ -157,4 +159,7 @@ jobs:
       - name: Check for TODO security items
         run: |
           echo "📝 Checking for security TODOs..."
-          grep -r -i "todo.*security\|fixme.*security" . --exclude-dir=.git || echo "No security TODOs found"
+          PATTERN="todo.*security\\|fixme.*security"
+          grep -r -i -E "$PATTERN" . \
+            --exclude-dir=.git \
+            || echo "No security TODOs found"

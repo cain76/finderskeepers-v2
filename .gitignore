@@ -63,3 +63,6 @@ config/secrets/
 *_temp
 *.backup
 *_backup
+
+# n8n local build artifacts (container-created; may be root-owned)
+n8n/custom-nodes/

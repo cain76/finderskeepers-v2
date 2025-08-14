@@ -27,14 +27,21 @@ git clone https://github.com/bitcainnet/finderskeepers-v2.git
 cd finderskeepers-v2
 ```
 
-2. Start services:
+2. Create shared Docker network:
+```bash
+./ensure-network.sh
+# or manually:
+docker network create shared-network
+```
+
+3. Start services:
 ```bash
 docker compose up -d
 ```
 
-3. Wait for initialization (~5 minutes for model downloads)
+4. Wait for initialization (~5 minutes for model downloads)
 
-4. Verify health:
+5. Verify health:
 ```bash
 ./scripts/health.sh
 ```

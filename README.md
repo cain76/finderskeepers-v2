@@ -120,6 +120,17 @@ finderskeepers-v2/
 └── docker-compose.yml     # Service orchestration
 ```
 
+### Updating Frontend Dependencies
+
+The frontend's `node_modules` directory is stored in a named Docker volume to avoid
+conflicts with files on the host. If you change dependencies, remove this volume
+before rebuilding:
+
+```bash
+./scripts/prune-frontend-node-modules.sh
+docker compose build frontend
+```
+
 ### Key Technologies
 - **Backend**: FastAPI, PostgreSQL (pgvector), Neo4j, Qdrant
 - **AI/ML**: Ollama, Llama3 8B, mxbai-embed-large

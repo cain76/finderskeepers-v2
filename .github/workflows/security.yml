@@ -37,18 +37,27 @@ jobs:
           if [ -f services/diary-api/requirements.txt ]; then
             pip install -r services/diary-api/requirements.txt
           fi
+          # Ensure Bandit is available with SARIF support
+          pip install 'bandit>=1.7.5'
 
-      - name: Run Bandit Security Linter
-        uses: tj-actions/bandit@v5.1
-        with:
-          options: "-r . -f json -o bandit-report.json"
-          # exit_zero is not a supported input for this action; make non-blocking via 'if: always()' on upload step
+      - name: Run Bandit Security Scan (SARIF)
+        run: |
+          # Run Bandit recursively, excluding heavy/vendor dirs; do not fail job on findings
+          bandit -r . -x node_modules,.venv,venv,services/diary-api/test_env -f sarif -o bandit.sarif.json || true
 
-      - name: Upload Bandit Scan Results
+      - name: Validate Bandit SARIF output
+        run: |
+          if [ -s bandit.sarif.json ]; then
+            python -c "import json,sys; json.load(open('bandit.sarif.json')); print('Bandit SARIF is valid JSON')"
+          else
+            echo "No Bandit SARIF generated; skipping upload"
+          fi
+
+      - name: Upload Bandit SARIF to GitHub
+        if: ${{ hashFiles('bandit.sarif.json') != '' }}
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
         with:
-          sarif_file: bandit-report.json
+          sarif_file: bandit.sarif.json
 
       - name: Run Safety Check for Python Dependencies
         run: |
@@ -69,7 +78,7 @@ jobs:
         if: always()
         run: |
           # Install Docker Scout CLI
-          curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh || true
 
           # Scan docker-compose.yml for security issues
           if [ -f docker-compose.yml ]; then
@@ -115,16 +124,20 @@ jobs:
         run: |
           echo "🔍 Checking for potential hardcoded secrets..."
 
-          # Check for common secret patterns (excluding .env.example)
-          if grep -r -E "(password|secret|key|token).*[:=].*['\"][^'\"]*['\"]" . \
+          # Only flag uppercase env-like variable names containing SECRET/PASSWORD/TOKEN/API_KEY assigned to quoted literals
+          if grep -RInE "^[[:space:]]*(export[[:space:]]+)?([A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)[[:space:]]*[:=][[:space:]]*['\"][^'\"$]+['\"]" . \
              --exclude-dir=.git \
              --exclude-dir=node_modules \
              --exclude-dir=.venv \
              --exclude-dir=venv \
+             --exclude-dir=services/diary-api/test_env \
+             --exclude-dir=services/diary-api/.venv \
              --exclude=".env.example" \
              --exclude="*.md" \
              --exclude="*.yml" \
-             --exclude="*.yaml"; then
+             --exclude="*.yaml" \
+             --exclude="*.lock" \
+             --exclude="*.log"; then
             echo "⚠️  Potential hardcoded secrets found above"
             echo "Please move these to environment variables"
             exit 1

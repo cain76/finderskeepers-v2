@@ -95,18 +95,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      shared-network:
-        aliases:
-          - n8n
-
-  # ========================================
-  # API BACKEND - AI GOD MODE with Direct Processing Pipeline
-  # HANDLES ALL MCP INTEGRATION DIRECTLY - NO N8N REQUIRED
-  # Automatic conversation processing with embeddings & knowledge graph
-  # ========================================
   fastapi:
     build:
       context: ./services/diary-api
@@ -398,20 +386,20 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - VITE_API_URL=http://fastapi:8000
-      - VITE_WS_URL=ws://fastapi:8000
-      - VITE_NEO4J_URI=bolt://localhost:7687
-      - VITE_NEO4J_USER=neo4j
-      - VITE_NEO4J_PASSWORD=${NEO4J_PASSWORD:-changeme_neo4j_password}
-      - VITE_QDRANT_URL=http://localhost:6333
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
+      - NODE_ENV=${NODE_ENV:-development}
+      - VITE_API_URL=${VITE_API_URL:-http://fastapi:8000}
+      - VITE_WS_URL=${VITE_WS_URL:-ws://fastapi:8000}
+      - VITE_NEO4J_URI=${VITE_NEO4J_URI:-bolt://neo4j:7687}
+      - VITE_NEO4J_USER=${VITE_NEO4J_USER:-neo4j}
+      - VITE_NEO4J_PASSWORD=${VITE_NEO4J_PASSWORD:-changeme_neo4j_password}
+      - VITE_QDRANT_URL=${VITE_QDRANT_URL:-http://qdrant:6333}
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-true}
+      - WATCHPACK_POLLING=${WATCHPACK_POLLING:-true}
       # Admin/Maintenance Dashboard Features
-      - VITE_ADMIN_ENABLED=true
-      - VITE_BULK_PROCESSING_ENABLED=true
-      - VITE_QUEUE_MAINTENANCE_ENABLED=true
-      - VITE_PROCESSING_STATS_ENABLED=true
+      - VITE_ADMIN_ENABLED=${VITE_ADMIN_ENABLED:-true}
+      - VITE_BULK_PROCESSING_ENABLED=${VITE_BULK_PROCESSING_ENABLED:-true}
+      - VITE_QUEUE_MAINTENANCE_ENABLED=${VITE_QUEUE_MAINTENANCE_ENABLED:-true}
+      - VITE_PROCESSING_STATS_ENABLED=${VITE_PROCESSING_STATS_ENABLED:-true}
     volumes:
       - ./fk2_frontend:/app
       - frontend_node_modules:/app/node_modules # run ./scripts/prune-frontend-node-modules.sh after dependency changes

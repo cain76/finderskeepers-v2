@@ -391,7 +391,7 @@ services:
   # ========================================
   frontend:
     build:
-      context: ./frontend
+      context: ./fk2_frontend
       dockerfile: Dockerfile
     container_name: fk2_frontend
     restart: unless-stopped
@@ -413,7 +413,7 @@ services:
       - VITE_QUEUE_MAINTENANCE_ENABLED=true
       - VITE_PROCESSING_STATS_ENABLED=true
     volumes:
-      - ./frontend:/app
+      - ./fk2_frontend:/app
       - /app/node_modules
       - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:

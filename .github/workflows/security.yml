@@ -129,7 +129,8 @@ jobs:
 
           # Only flag uppercase env-like variable names containing SECRET/PASSWORD/TOKEN/API_KEY assigned to quoted literals
           REGEX_PREFIX="^[[:space:]]*(export[[:space:]]+)?("
-          REGEX_MID="[A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)"
+          REGEX_MID="[A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|"\
+          "SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)"
           REGEX_SUFFIX="[[:space:]]*[:=][[:space:]]*['\"][^'\"$]+['\"]"
           REGEX="$REGEX_PREFIX$REGEX_MID$REGEX_SUFFIX"
 

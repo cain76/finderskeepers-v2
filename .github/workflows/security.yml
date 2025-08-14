@@ -128,19 +128,24 @@ jobs:
           echo "🔍 Checking for potential hardcoded secrets..."
 
           # Only flag uppercase env-like variable names containing SECRET/PASSWORD/TOKEN/API_KEY assigned to quoted literals
-          if grep -RInE "^[[:space:]]*(export[[:space:]]+)?([A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)[[:space:]]*[:=][[:space:]]*['\"][^'\"$]+['\"]" . \
-             --exclude-dir=.git \
-             --exclude-dir=node_modules \
-             --exclude-dir=.venv \
-             --exclude-dir=venv \
-             --exclude-dir=services/diary-api/test_env \
-             --exclude-dir=services/diary-api/.venv \
-             --exclude=".env.example" \
-             --exclude="*.md" \
-             --exclude="*.yml" \
-             --exclude="*.yaml" \
-             --exclude="*.lock" \
-             --exclude="*.log"; then
+          REGEX_PREFIX="^[[:space:]]*(export[[:space:]]+)?("
+          REGEX_MID="[A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|SESSION_SECRET|JWT_SECRET)[A-Z0-9_]*)"
+          REGEX_SUFFIX="[[:space:]]*[:=][[:space:]]*['\"][^'\"$]+['\"]"
+          REGEX="$REGEX_PREFIX$REGEX_MID$REGEX_SUFFIX"
+
+          if grep -RInE "$REGEX" . \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude-dir=.venv \
+            --exclude-dir=venv \
+            --exclude-dir=services/diary-api/test_env \
+            --exclude-dir=services/diary-api/.venv \
+            --exclude=".env.example" \
+            --exclude="*.md" \
+            --exclude="*.yml" \
+            --exclude="*.yaml" \
+            --exclude="*.lock" \
+            --exclude="*.log"; then
             echo "⚠️  Potential hardcoded secrets found above"
             echo "Please move these to environment variables"
             exit 1

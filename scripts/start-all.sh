@@ -43,6 +43,10 @@ mkdir -p logs
 chmod -R 755 data/
 chmod -R 755 logs/
 
+# Ensure shared network exists
+echo "🌐 Ensuring shared Docker network exists..."
+./ensure-network.sh
+
 # Pull latest images
 echo "📦 Pulling latest Docker images..."
 docker compose pull

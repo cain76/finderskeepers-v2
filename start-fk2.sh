@@ -70,12 +70,21 @@ fi
 
 # Create external network if it doesn't exist
 echo -e "${YELLOW}Setting up Docker network...${NC}"
-if ! docker network inspect shared-network &> /dev/null; then
-    echo "Creating shared-network..."
-    docker network create shared-network
-    echo -e "${GREEN}✓ Network created${NC}"
-else
-    echo -e "${GREEN}✓ Network already exists${NC}"
+# Ensure Docker network is managed by docker-compose (not created externally)
+echo -e "${YELLOW}Configuring Docker network (managed by Compose)...${NC}"
+if docker network inspect shared-network &> /dev/null; then
+    # If a pre-existing 'shared-network' exists but isn't managed by Compose, it
+    # will lack the expected compose labels and cause warnings. If it has no
+    # attached containers, remove it so Compose can recreate and manage it.
+    CONTAINERS_JSON="$(docker network inspect shared-network -f '{{json .Containers}}' || echo null)"
+    if [ "$CONTAINERS_JSON" = "null" ] || [ "$CONTAINERS_JSON" = "{}" ]; then
+        echo "Removing pre-existing 'shared-network' so docker-compose can recreate it..."
+        docker network rm shared-network || true
+        echo -e "${GREEN}✓ Removed unmanaged network${NC}"
+    else
+        echo -e "${YELLOW}Pre-existing 'shared-network' has attached containers. If you see a Compose label warning, stop dependent containers and run:${NC}"
+        echo -e "${YELLOW}  docker network rm shared-network${NC}"
+    fi
 fi
 
 # Create required directories

@@ -68,7 +68,7 @@ export const apiService = {
 
 // WebSocket connection helper
 export const createWebSocketConnection = (clientId: string) => {
-  const wsUrl = `${WS_URL.replace('http', 'ws')}/ws/${clientId}`;
+  const wsUrl = `${WS_URL.replace(/^http/, 'ws').replace(/^https/, 'wss')}/ws/${clientId}`;
   return new WebSocket(wsUrl);
 };
 

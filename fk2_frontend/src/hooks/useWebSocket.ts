@@ -203,12 +203,23 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
 
   // Connect on mount
   useEffect(() => {
-    connect();
+    let mounted = true;
+    
+    const connectWithDelay = () => {
+      if (mounted) {
+        connect();
+      }
+    };
+    
+    // Small delay to avoid immediate effect loops
+    const timer = setTimeout(connectWithDelay, 100);
     
     return () => {
+      mounted = false;
+      clearTimeout(timer);
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [clientId]); // Only depend on clientId to avoid infinite loops
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,

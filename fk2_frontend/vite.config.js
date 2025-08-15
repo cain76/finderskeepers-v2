@@ -9,6 +9,14 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
+  // Only expose VITE_ prefixed environment variables for security
+  const clientEnv = Object.keys(env)
+    .filter(key => key.startsWith('VITE_'))
+    .reduce((filtered, key) => {
+      filtered[`process.env.${key}`] = JSON.stringify(env[key])
+      return filtered
+    }, {})
+  
   return {
     plugins: [react()],
     resolve: {
@@ -32,9 +40,6 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    define: {
-      // Make env variables available to the app
-      'process.env': env,
-    },
+    define: clientEnv,
   }
 })

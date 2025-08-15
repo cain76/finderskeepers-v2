@@ -219,7 +219,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
       clearTimeout(timer);
       disconnect();
     };
-  }, [clientId]); // Only depend on clientId to avoid infinite loops
+  }, [clientId, connect, disconnect]); // Add connect and disconnect to dependencies
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,

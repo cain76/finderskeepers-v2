@@ -389,7 +389,7 @@ export default function Dashboard() {
               <Typography variant="h6" fontWeight="bold" gutterBottom>
                 System Health
               </Typography>
-              <Box space={2}>
+              <Box gap={2}>
                 <Box display="flex" justifyContent="space-between" alignItems="center" py={1}>
                   <Typography variant="body2">API Service</Typography>
                   <Chip icon={<CheckCircleIcon />} label="Healthy" color="success" size="small" />

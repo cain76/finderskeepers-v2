@@ -17,6 +17,7 @@ WORKDIR /app
 COPY package*.json ./
 # Use npm ci when a lockfile exists; otherwise fall back to npm install
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN npm install @mui/material @emotion/react @emotion/styled
 
 # Copy the rest of the frontend source code
 COPY . .
@@ -26,8 +27,8 @@ EXPOSE 3000
 
 # Provide default values for the environment variables used in the app.
 ENV NODE_ENV=development
-ENV VITE_API_URL=http://localhost:8000
-ENV VITE_WS_URL=ws://localhost:8000
+ENV VITE_API_URL=http://fk2_fastapi:8000
+ENV VITE_WS_URL=ws://fk2_fastapi:8000
 
-# Start the development server with host and port explicitly set
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+# Start the development server
+CMD ["npm", "run", "dev"]

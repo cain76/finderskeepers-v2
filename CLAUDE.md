@@ -35,15 +35,29 @@ docker compose logs -f fastapi  # specific service
 ```bash
 # FastAPI development (requires Docker services running)
 cd services/diary-api
+uv sync  # Install dependencies (preferred package manager)
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Alternative with pip
 pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# Run tests (when implemented)
-pytest services/diary-api/tests/
+# Frontend development
+cd fk2_frontend
+npm install
+npm run dev  # Starts on port 3000
 
-# Code formatting
-black services/diary-api/
-isort services/diary-api/
+# Run tests (when implemented)
+cd services/diary-api && uv run pytest
+cd fk2_frontend && npm test
+
+# Code formatting & linting
+cd services/diary-api
+uv run black .
+uv run isort .
+
+cd fk2_frontend
+npm run lint
 ```
 
 ### MCP Session Management
@@ -195,10 +209,11 @@ mcp__fk-knowledge__endsession(completion_timeout=60)
 
 ### Service URLs (Local Development)
 
-- FastAPI: http://localhost:8000
-- n8n: http://localhost:5678 (admin/finderskeepers2025)
-- Neo4j: http://localhost:7474 (neo4j/fk2025neo4j)
-- Qdrant: http://localhost:6333
+- **FastAPI Backend**: http://localhost:8000 (API docs: /docs)
+- **Frontend**: http://localhost:3000 (React application)
+- **n8n**: http://localhost:5678 (admin/finderskeepers2025) - DEPRECATED
+- **Neo4j Browser**: http://localhost:7474 (neo4j/fk2025neo4j)
+- **Qdrant Dashboard**: http://localhost:6333
 
 ### Environment Variables Required
 
@@ -245,9 +260,40 @@ docker run -d -p 8080:8000 -p 9443:9443 --name portainer --restart=always \
 # Access: http://localhost:9443 (HTTPS) or http://localhost:8080 (HTTP)
 ```
 
+## Code Quality & Package Management
+
+### Python Backend (services/diary-api/)
+- **Python Version**: 3.12+
+- **Package Manager**: `uv` (preferred) or `pip`
+- **Code Style**: Black (88 char line length) + isort
+- **Dependencies**: Managed via `pyproject.toml`
+- **Testing**: pytest with asyncio support
+
+### Frontend (fk2_frontend/)
+- **Framework**: React 18 + TypeScript 5.7+
+- **Build Tool**: Vite
+- **Styling**: TailwindCSS + Material-UI
+- **State**: Zustand
+- **Linting**: ESLint with TypeScript rules
+
+### Task Completion Checklist
+Always run before considering a task complete:
+```bash
+# Backend
+cd services/diary-api && uv run black . && uv run isort .
+
+# Frontend  
+cd fk2_frontend && npm run lint
+
+# Health check
+./scripts/health.sh
+```
+
 ## File Structure Notes
 
-- `services/diary-api/` - FastAPI application (Python 3.11)
+- `services/diary-api/` - FastAPI application (Python 3.12+)
+- `services/mcp-session-server/` - MCP server for Claude Desktop integration
+- `fk2_frontend/` - React TypeScript frontend with Material-UI
 - `config/` - Service configuration files
 - `data/` - Persistent data storage (git-ignored)
 - `logs/` - Application logs

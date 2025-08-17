@@ -1,0 +1,87 @@
+# docker-compose.override.yml
+# Fixes for container communication issues in FindersKeepers v2
+# This file automatically overrides settings in docker-compose.yml
+
+services:
+  # Fix FastAPI service discovery and networking
+  fastapi:
+    environment:
+      # Use container names for internal communication
+      - POSTGRES_URL=postgresql://finderskeepers:${POSTGRES_PASSWORD:-fk2025secure}@fk2_postgres:5432/finderskeepers_v2
+      - NEO4J_URI=bolt://fk2_neo4j:7687
+      - REDIS_URL=redis://fk2_redis:6379
+      - QDRANT_URL=http://fk2_qdrant:6333
+      - OLLAMA_URL=http://fk2_ollama:11434
+    extra_hosts:
+      # Allow fastapi to resolve container names
+      - "fk2_postgres:172.25.0.10"
+      - "fk2_neo4j:172.25.0.11"
+      - "fk2_redis:172.25.0.12"
+      - "fk2_qdrant:172.25.0.13"
+      - "fk2_ollama:172.25.0.14"
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.20
+
+  # Ensure PostgreSQL has a fixed IP for reliable communication
+  postgres:
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.10
+
+  # Ensure Neo4j has a fixed IP
+  neo4j:
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.11
+
+  # Ensure Redis has a fixed IP
+  redis:
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.12
+
+  # Ensure Qdrant has a fixed IP
+  qdrant:
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.13
+
+  # Ensure Ollama has a fixed IP
+  ollama:
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.14
+
+  # Fix n8n networking (even though deprecated, keep it working)
+  n8n:
+    environment:
+      - DB_POSTGRESDB_HOST=fk2_postgres
+    extra_hosts:
+      - "fk2_postgres:172.25.0.10"
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.15
+
+  # Fix frontend networking
+  frontend:
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+      - VITE_NEO4J_URI=bolt://localhost:7687
+      - VITE_QDRANT_URL=http://localhost:6333
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.21
+
+  # Fix webscraper networking
+  webscraper:
+    networks:
+      shared-network:
+        ipv4_address: 172.25.0.22
+
+# Ensure the network has proper configuration
+networks:
+  shared-network:
+    external: true
+    name: shared-network

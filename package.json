@@ -6,7 +6,7 @@
     "@modelcontextprotocol/server-postgres": "^0.6.2",
     "@modelcontextprotocol/server-sequential-thinking": "^2025.7.1",
     "@upstash/context7-mcp": "^1.0.14",
-    "@wonderwhy-er/desktop-commander": "^0.2.3",
+    "@wonderwhy-er/desktop-commander": "^0.2.8",
     "mcp-server-kubernetes": "^2.5.0",
     "puppeteer": "^24.12.1",
     "puppeteer-mcp-server": "^0.7.2",
